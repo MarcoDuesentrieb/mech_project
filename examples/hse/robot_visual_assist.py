@@ -135,7 +135,6 @@ def main():
     try:
         while True:
             if not frame_queue.empty():
-                pygame.event.pump()  # Events aktualisieren
 
                 img = frame_queue.get()
 
@@ -143,6 +142,8 @@ def main():
                 cv2.imshow('Video', img)
                 key_input = cv2.waitKey(1)
 
+                pygame.event.pump()  # Events aktualisieren
+                
                 xyMove = [-round(joystick.get_axis(0), 2), -round(joystick.get_axis(1), 2)]         # linker Stick x und y Achse für Bewegung
                 zRot = -round(joystick.get_axis(3), 2)                                              # rechter Stick x Achse für Rotation
                 specialMoves = [joystick.get_button(0),                                             

@@ -50,24 +50,26 @@ class Dog:
         idx = (idx + 1) % len(modes) # next index
         self.mode = modes[idx] # switch to next mode
 
+    
     def process_controller(self, xyMove, zRot, specialMoves, loop):
-        movement = 0
+        
         # Bewegung in x und y Richtung, Rotation in x Richtung
-        if abs(xyMove(1)) > 0.5 or abs(xyMove(2)) > 0.5 or abs(zRot) > 0.5:
-            self.set_velocity(xyMove(1)*self.vmax, 0.5*xyMove(2)*self.vmax, zRot*self.wmax)
+        if (abs(xyMove[0]) > 0.5) or (abs(xyMove[1]) > 0.5) or (abs(zRot) > 0.5):
+            self.set_velocity(0.8*xyMove[1]*self.vmax, 0.5*xyMove[0]*self.vmax, zRot*self.wmax)
         # Spezialbewegungen nur wenn keine Bewegung
         elif specialMoves == [1, 0, 0, 0]:                              # X gedrückt
             asyncio.run_coroutine_threadsafe(self.paw_wave(), loop)
         elif specialMoves == [0, 1, 0, 0]:                              # Kreis gedrückt 
-            asyncio.run_coroutine_threadsafe(self.sit(), loop)
-        elif specialMoves == [0, 0, 1, 0]:                              # Dreieck gedrückt
-            asyncio.run_coroutine_threadsafe(self.stand_down(), loop)
-        elif specialMoves == [0, 0, 0, 1]:                              # Viereck gedrückt
             asyncio.run_coroutine_threadsafe(self.stand_up(), loop)
+        elif specialMoves == [0, 0, 1, 0]:                              # Dreieck gedrückt
+            asyncio.run_coroutine_threadsafe(self.sit(), loop)
+        elif specialMoves == [0, 0, 0, 1]:                              # Viereck gedrückt
+            asyncio.run_coroutine_threadsafe(self.stand_down(), loop)
         # wenn keine der oberen Eingaben
         else:
             # stop movement
             self.set_velocity(0.0, 0.0, 0.0)
+
         asyncio.run_coroutine_threadsafe(self.move_xyz(), loop)
 
     def process_key(self, key, loop):
