@@ -36,12 +36,23 @@ cv2.waitKey(1)  # Ensure the window is created
 import logging
 import threading
 import time
+import pygame
 import yaml
 from os import path
 from queue import Queue
 from go2_webrtc_driver.webrtc_driver import Go2WebRTCConnection, WebRTCConnectionMethod
 from go2_webrtc_driver.constants import VUI_COLOR
 from aiortc import MediaStreamTrack
+
+# Pygame und Joystick initialisieren
+pygame.init()
+pygame.joystick.init()
+joystick = pygame.joystick.Joystick(0)
+joystick.init()
+# Pygame beenden, wenn kein Controller verbunden ist
+if pygame.joystick.get_count() == 0:
+    print("Kein Controller gefunden.")
+    pygame.quit()
 
 # Constants 
 IP_ADDRESS = "192.168.4.202"
@@ -124,16 +135,28 @@ def main():
     try:
         while True:
             if not frame_queue.empty():
+                pygame.event.pump()  # Events aktualisieren
+
                 img = frame_queue.get()
 
                 # Display the frame 
                 cv2.imshow('Video', img)
                 key_input = cv2.waitKey(1)
 
+                xyMove = [-round(joystick.get_axis(0), 2), -round(joystick.get_axis(1), 2)]         # linker Stick x und y Achse für Bewegung
+                zRot = -round(joystick.get_axis(3), 2)                                              # rechter Stick x Achse für Rotation
+                specialMoves = [joystick.get_button(0),                                             
+                                joystick.get_button(1),                                             
+                                joystick.get_button(2),                                             
+                                joystick.get_button(3)]                         # [X, Kreis, Dreieck, Viereck]
+                                            
+
+
                 dog.set_mode("MODE_MANUAL")
 
                 if dog.mode is ControlMode.MODE_MANUAL.value:
                     dog.process_key(key_input, loop)
+                    dog.process_controller(xyMove, zRot, specialMoves, loop)    # Funktionsaufruf
 
             else:
                 # Sleep briefly to prevent high CPU usage
