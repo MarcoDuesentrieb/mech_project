@@ -23,6 +23,7 @@ Note:
 """
 
 import asyncio
+import pyrealsense2 as rs
 import cv2
 import numpy as np
 from dog import Dog, ControlMode
