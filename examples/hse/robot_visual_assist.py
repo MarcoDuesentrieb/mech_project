@@ -46,31 +46,10 @@ from aiortc import MediaStreamTrack
 
 # Constants 
 IP_ADDRESS = "192.168.4.202"
-CAMERA_CALIBRATION_DATA = "ost.yaml"
 
 # Enable logging for debugging
 logging.basicConfig(level=logging.WARN)
 
-def load_camera_parameters(yaml_file):
-    # Default values in case the file does not exist
-    camera_matrix = np.eye(3, dtype=np.float32)
-    dist_coeffs = np.ones(5, dtype=np.float32)
-
-    try:    
-        with open(yaml_file, 'r') as file:
-            data = yaml.safe_load(file)
-    
-        # Extract camera matrix
-        camera_matrix = np.array(data['camera_matrix']['data']).reshape(3, 3)
-        
-        # Extract distortion coefficients
-        dist_coeffs = np.array(data['distortion_coefficients']['data'])
-    except FileNotFoundError:
-        print("ERROR - File not found: " + yaml_file)
-        print("The camera matrix will be set to the unity matrix.\n \
-              The distortion coefficients will be set to a vector of ones.")
-
-    return camera_matrix, dist_coeffs
 
 dog = Dog(IP_ADDRESS)
 
@@ -78,20 +57,71 @@ def main():
     global dog
     frame_queue = Queue()
 
-    # Read camera parameters from YAML file
-    camera_matrix, dist_coeffs = load_camera_parameters(CAMERA_CALIBRATION_DATA)
-    dog.set_camera_parameters(camera_matrix, dist_coeffs)
+    # Configure depth and color streams
+    pipeline = rs.pipeline()
+    config = rs.config()
+
+    # Get device product line of intel realsense camera for setting a supporting resolution
+    pipeline_wrapper = rs.pipeline_wrapper(pipeline)
+    pipeline_profile = config.resolve(pipeline_wrapper)
+    device = pipeline_profile.get_device()
+    device_product_line = str(device.get_info(rs.camera_info.product_line))
+
+    #Check for right hardware
+    found_rgb = False
+    for s in device.sensors:
+        if s.get_info(rs.camera_info.name) == 'RGB Camera':
+            found_rgb = True
+            break
+    if not found_rgb:
+        print("The demo requires Depth camera with Color sensor")
+        exit(0)
+
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+
+    # Start streaming
+    pipeline.start(config)
 
     # Choose a connection method
     dog.conn = Go2WebRTCConnection(WebRTCConnectionMethod.LocalSTA, ip=dog.ip_address)
 
-    # Async function to receive video frames and put them in the queue
+    def capture_realsense_frames():
+        while True:
+            # Wait for a coherent pair of frames: depth and color
+            frames = pipeline.wait_for_frames()
+            depth_frame = frames.get_depth_frame()
+            color_frame = frames.get_color_frame()
+
+            if not depth_frame or not color_frame:
+                continue
+
+            # Convert images to numpy arrays
+            depth_image = np.asanyarray(depth_frame.get_data())
+            color_image = np.asanyarray(color_frame.get_data())
+
+            # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
+            depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+
+            depth_colormap_dim = depth_colormap.shape
+            color_colormap_dim = color_image.shape
+
+            # If depth and color resolutions are different, resize color image to match depth image for display
+            if depth_colormap_dim != color_colormap_dim:
+                resized_color_image = cv2.resize(color_image, dsize=(depth_colormap_dim[1], depth_colormap_dim[0]), interpolation=cv2.INTER_AREA)
+                img = np.hstack((resized_color_image, depth_colormap))
+                frame_queue.put(img)
+            else:
+                img = np.hstack((color_image, depth_colormap))
+                frame_queue.put(img)
+
+    """#Async function to receive video frames and put them in the queue
     async def recv_camera_stream(track: MediaStreamTrack):
         while True:
             frame = await track.recv()
             # Convert the frame to a NumPy array
             img = frame.to_ndarray(format="bgr24")
-            frame_queue.put(img)
+            frame_queue.put(img)"""
 
     def run_asyncio_loop(loop):
         asyncio.set_event_loop(loop)
@@ -99,12 +129,6 @@ def main():
             try:
                 # Connect to the device
                 await dog.conn.connect()
-
-                # Switch video channel on and start receiving video frames
-                dog.conn.video.switchVideoChannel(True)
-
-                # Add callback to handle received video frames
-                dog.conn.video.add_track_callback(recv_camera_stream)
 
                 logging.info("Performing 'StandUp' movement...")
                 dog.balance_stand()
@@ -121,6 +145,10 @@ def main():
     # Start the asyncio event loop in a separate thread
     asyncio_thread = threading.Thread(target=run_asyncio_loop, args=(loop,))
     asyncio_thread.start()
+
+    #Start the realsense stream in a seperate thread
+    realsense_thread = threading.Thread(target=capture_realsense_frames)
+    realsense_thread.start()
 
     try:
         while True:
