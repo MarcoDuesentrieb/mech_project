@@ -132,6 +132,8 @@ def main():
     asyncio_thread = threading.Thread(target=run_asyncio_loop, args=(loop,))
     asyncio_thread.start()
 
+    specialMoves_prev = [0, 0, 0, 0]
+
     try:
         while True:
             if not frame_queue.empty():
@@ -155,7 +157,9 @@ def main():
 
                 if dog.mode is ControlMode.MODE_MANUAL.value:
                     dog.process_key(key_input, loop)
-                    dog.process_controller(xyMove, zRot, specialMoves, loop)    # Funktionsaufruf
+                    dog.process_controller(xyMove, zRot, specialMoves, specialMoves_prev, loop)    # Funktionsaufruf
+                
+                specialMoves_prev = specialMoves
 
             else:
                 # Sleep briefly to prevent high CPU usage
