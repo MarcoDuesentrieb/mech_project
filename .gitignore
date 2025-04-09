@@ -28,3 +28,6 @@ output.wav
 output_video.mp4
 
 build/
+
+# Ignore webRTC stream test file
+webRTC_test.py
