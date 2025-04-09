@@ -55,7 +55,7 @@ class Dog:
         
         # Bewegung in x und y Richtung, Rotation in x Richtung
         if (abs(xyMove[0]) > 0.5) or (abs(xyMove[1]) > 0.5) or (abs(zRot) > 0.5):
-            self.set_velocity(0.8*xyMove[1]*self.vmax, 0.5*xyMove[0]*self.vmax, zRot*self.wmax)
+            self.set_velocity(1*xyMove[1]*self.vmax, 0.5*xyMove[0]*self.vmax, zRot*self.wmax)
         # Spezialbewegungen nur wenn keine Bewegung
         elif specialMoves == [1, 0, 0, 0]:                              # X gedrückt
             asyncio.run_coroutine_threadsafe(self.paw_wave(), loop)
