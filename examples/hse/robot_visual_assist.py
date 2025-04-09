@@ -86,6 +86,9 @@ def main():
     # Choose a connection method
     dog.conn = Go2WebRTCConnection(WebRTCConnectionMethod.LocalSTA, ip=dog.ip_address)
 
+    #Set dog to manual mode
+    dog.set_mode("MODE_MANUAL")
+
     def capture_realsense_frames():
         while True:
             # Wait for a coherent pair of frames: depth and color
@@ -158,8 +161,6 @@ def main():
                 # Display the frame 
                 cv2.imshow('Video', img)
                 key_input = cv2.waitKey(1)
-
-                dog.set_mode("MODE_MANUAL")
 
                 if dog.mode is ControlMode.MODE_MANUAL.value:
                     dog.process_key(key_input, loop)
