@@ -109,13 +109,20 @@ def main():
             depth_colormap_dim = depth_colormap.shape
             color_colormap_dim = color_image.shape
 
+            #Color pixels closer than threshold
+            depth_threshold = 1000
+            obstacle_mask = (depth_image > 0) & (depth_image < depth_threshold)
+            red_mask = np.zeros_like(color_image)
+            red_mask[obstacle_mask] = [0, 0, 255]
+            overlay = cv2.addWeighted(color_image, 0.8, red_mask, 0.2, 0)
+
             # If depth and color resolutions are different, resize color image to match depth image for display
             if depth_colormap_dim != color_colormap_dim:
                 resized_color_image = cv2.resize(color_image, dsize=(depth_colormap_dim[1], depth_colormap_dim[0]), interpolation=cv2.INTER_AREA)
-                img = np.hstack((resized_color_image, depth_colormap))
+                img = np.hstack((resized_color_image, depth_colormap, overlay))
                 frame_queue.put(img)
             else:
-                img = np.hstack((color_image, depth_colormap))
+                img = np.hstack((color_image, depth_colormap, overlay))
                 frame_queue.put(img)
 
     """#Async function to receive video frames and put them in the queue
