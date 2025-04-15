@@ -89,6 +89,10 @@ def main():
     #Set dog to manual mode
     dog.set_mode("MODE_MANUAL")
 
+    def output_img():
+        capture_realsense_frames()
+
+
     def capture_realsense_frames():
         while True:
             # Wait for a coherent pair of frames: depth and color
@@ -109,12 +113,27 @@ def main():
             depth_colormap_dim = depth_colormap.shape
             color_colormap_dim = color_image.shape
 
-            #Color pixels closer than threshold
-            depth_threshold = 1000
-            obstacle_mask = (depth_image > 0) & (depth_image < depth_threshold)
+            #Generate pointcloud
+            mapped_frame, color_source = color_frame, color_image
+            pc = rs.pointcloud()
+            pc.map_to(mapped_frame)
+            points = pc.calculate(depth_frame)
+            v, t = points.get_vertices(), points.get_texture_coordinates()
+            verts = np.asanyarray(v).view(np.float32).reshape(-1, 3)  # xyz
+            texcoords = np.asanyarray(t).view(np.float32).reshape(-1, 2)  # uv
+
+            # 3D-obstacle mask
+            z_values = verts[:, 2]  # z = depth
+            y_values = verts[:, 1]  # y = height refering to axis through cameralens
+            depth_threshold = 1.0  # sets distance in meters to detect obstacle
+
+            obstacle_mask_3d = (z_values > 0) & (z_values < depth_threshold) & (y_values < 0.1)
+            # Maske auf Bildgröße bringen
+            obstacle_mask_img = obstacle_mask_3d.reshape(depth_image.shape)
             red_mask = np.zeros_like(color_image)
-            red_mask[obstacle_mask] = [0, 0, 255]
-            overlay = cv2.addWeighted(color_image, 0.8, red_mask, 0.2, 0)
+            red_mask[obstacle_mask_img] = [0, 0, 255]
+            overlay = cv2.addWeighted(color_image, 0.5, red_mask, 0.5, 0) 
+            
 
             # If depth and color resolutions are different, resize color image to match depth image for display
             if depth_colormap_dim != color_colormap_dim:
@@ -157,7 +176,7 @@ def main():
     asyncio_thread.start()
 
     #Start the realsense stream in a seperate thread
-    realsense_thread = threading.Thread(target=capture_realsense_frames)
+    realsense_thread = threading.Thread(target=output_img)
     realsense_thread.start()
 
     try:
