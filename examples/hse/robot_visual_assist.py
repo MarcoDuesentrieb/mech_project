@@ -129,11 +129,12 @@ def main():
             texcoords = np.asanyarray(t).view(np.float32).reshape(-1, 2)  # uv
 
             # 3D-obstacle mask
+            x_values = verts[:, 0]  #x = width
             z_values = verts[:, 2]  # z = depth
             y_values = verts[:, 1]  # y = height refering to axis through cameralens
-            depth_threshold = 1.0  # sets distance in meters to detect obstacle
+            depth_threshold = 2.0  # sets distance in meters to detect obstacle
 
-            obstacle_mask_3d = (z_values > 0) & (z_values < depth_threshold) & (y_values < 0.1)
+            obstacle_mask_3d = (z_values > 0) & (z_values < depth_threshold) & (y_values < 0.3) & (y_values > -0.2) & (x_values > -0.3) & (x_values < 0.3)
             # Maske auf Bildgröße bringen
             obstacle_mask_img = obstacle_mask_3d.reshape(depth_image.shape)
             red_mask = np.zeros_like(color_image)
@@ -150,13 +151,6 @@ def main():
                 img = np.hstack((color_image, depth_colormap, overlay))
                 frame_queue.put(img)
 
-    """#Async function to receive video frames and put them in the queue
-    async def recv_camera_stream(track: MediaStreamTrack):
-        while True:
-            frame = await track.recv()
-            # Convert the frame to a NumPy array
-            img = frame.to_ndarray(format="bgr24")
-            frame_queue.put(img)"""
 
     def run_asyncio_loop(loop):
         asyncio.set_event_loop(loop)
@@ -202,6 +196,7 @@ def main():
                 time.sleep(0.01)
     finally:
         cv2.destroyAllWindows()
+        pipeline.stop()
         # Stop the asyncio event loop
         loop.call_soon_threadsafe(loop.stop)
         asyncio_thread.join()
