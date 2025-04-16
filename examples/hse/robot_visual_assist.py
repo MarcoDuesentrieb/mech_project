@@ -37,7 +37,6 @@ cv2.waitKey(1)  # Ensure the window is created
 import logging
 import threading
 import time
-import yaml
 from os import path
 from queue import Queue
 from go2_webrtc_driver.webrtc_driver import Go2WebRTCConnection, WebRTCConnectionMethod
@@ -97,9 +96,10 @@ def main():
         while True:
             # Wait for a coherent pair of frames: depth and color
             frames = pipeline.wait_for_frames()
-            
+
             # Align depth frame to color frame
-            align = rs.align(rs.stream.color)
+            align_to = rs.stream.color
+            align = rs.align(align_to)
             aligned_frames = align.process(frames)
 
             # Extract aligned depth and color frames
