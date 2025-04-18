@@ -114,32 +114,31 @@ def main():
             color_image = np.asanyarray(color_frame.get_data())
 
             # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
-            depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+            depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.1), cv2.COLORMAP_AUTUMN)
 
             depth_colormap_dim = depth_colormap.shape
             color_colormap_dim = color_image.shape
 
-            #Generate pointcloud
+            # Generate pointcloud
             mapped_frame, color_source = color_frame, color_image
             pc = rs.pointcloud()
             pc.map_to(mapped_frame)
             points = pc.calculate(depth_frame)
             v, t = points.get_vertices(), points.get_texture_coordinates()
             verts = np.asanyarray(v).view(np.float32).reshape(-1, 3)  # xyz
-            texcoords = np.asanyarray(t).view(np.float32).reshape(-1, 2)  # uv
 
             # 3D-obstacle mask
-            x_values = verts[:, 0]  #x = width
+            x_values = verts[:, 0]  # x = width
             z_values = verts[:, 2]  # z = depth
             y_values = verts[:, 1]  # y = height refering to axis through cameralens
             depth_threshold = 2.0  # sets distance in meters to detect obstacle
 
             obstacle_mask_3d = (z_values > 0) & (z_values < depth_threshold) & (y_values < 0.3) & (y_values > -0.2) & (x_values > -0.3) & (x_values < 0.3)
-            # Maske auf Bildgröße bringen
+            # Resize mask to match colored image
             obstacle_mask_img = obstacle_mask_3d.reshape(depth_image.shape)
-            red_mask = np.zeros_like(color_image)
-            red_mask[obstacle_mask_img] = [0, 0, 255]
-            overlay = cv2.addWeighted(color_image, 0.5, red_mask, 0.5, 0) 
+            color_mask = np.zeros_like(color_image)
+            color_mask[obstacle_mask_img] = depth_colormap[obstacle_mask_img]
+            overlay = cv2.addWeighted(color_image, 0.7, color_mask, 0.3, 0)
             
 
             # If depth and color resolutions are different, resize color image to match depth image for display
