@@ -15,6 +15,8 @@ import cv2
 import fractions
 import pyrealsense2 as rs
 import numpy as np
+import queue
+import threading
 
 from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
@@ -24,6 +26,9 @@ from av import VideoFrame
 ROOT = os.path.dirname(__file__)        # Speicherort dieses Python-Files
 pcs = set()                             # zur Speicherung aller aktiven WebRTC-Verbindungen
 
+# Frame-Queue initialisieren
+frame_queue = queue.Queue(maxsize=1)
+
 # RealSense Setup
 pipeline = rs.pipeline()
 config = rs.config()
@@ -31,34 +36,23 @@ config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
 config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 pipeline.start(config)
 
-class RealSenseVideoStreamTrack(VideoStreamTrack):
-    kind = "video"
+def capture_frames():
+    
+    # Align depth frame to color frame
+    align_to = rs.stream.color
+    align = rs.align(align_to)
 
-    def __init__(self):     # Konstruktor
-        super().__init__()
-
-
-    async def recv(self):
-        pts, time_base = await self.next_timestamp()
+    while True:
         frames = pipeline.wait_for_frames()
-        
-        # Align depth frame to color frame
-        align_to = rs.stream.color
-        align = rs.align(align_to)
-        aligned_frames = align.process(frames)
 
+        aligned_frames = align.process(frames)
+        
         depth_frame = aligned_frames.get_depth_frame()
         depth_image = np.asanyarray(depth_frame.get_data())
 
         color_frame = aligned_frames.get_color_frame()
         color_image = np.asanyarray(color_frame.get_data())
-
-        # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
-        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.1), cv2.COLORMAP_AUTUMN)
-
-        depth_colormap_dim = depth_colormap.shape
-        color_colormap_dim = color_image.shape
-
+        
         # Generate pointcloud
         mapped_frame, color_source = color_frame, color_image
         pc = rs.pointcloud()
@@ -74,6 +68,13 @@ class RealSenseVideoStreamTrack(VideoStreamTrack):
         depth_threshold = 2.0  # sets distance in meters to detect obstacle
 
         obstacle_mask_3d = (z_values > 0) & (z_values < depth_threshold) & (y_values < 0.3) & (y_values > -0.2) & (x_values > -0.3) & (x_values < 0.3)
+        
+        # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
+        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.1), cv2.COLORMAP_AUTUMN)
+
+        depth_colormap_dim = depth_colormap.shape
+        color_colormap_dim = color_image.shape
+
         # Resize mask to match colored image
         obstacle_mask_img = obstacle_mask_3d.reshape(depth_image.shape)
         color_mask = np.zeros_like(color_image)
@@ -89,6 +90,28 @@ class RealSenseVideoStreamTrack(VideoStreamTrack):
 
         # Umwandlung für WebRTC
         img = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+
+        # Bild in die Queue legen
+        if not frame_queue.full():
+            frame_queue.put(img)
+
+threading.Thread(target=capture_frames, daemon=True).start()
+
+class RealSenseVideoStreamTrack(VideoStreamTrack):
+    kind = "video"
+
+    def __init__(self):     # Konstruktor
+        super().__init__()
+
+
+    async def recv(self):
+        pts, time_base = await self.next_timestamp()
+        
+        try:
+            img = frame_queue.get(timeout=1)
+        except queue.Empty:
+            img = np.zeros((480, 640, 3), dtype=np.uint8)  # Fallback bei Frame-Mangel
+        
         frame = VideoFrame.from_ndarray(img, format="rgb24")
 
         frame.pts = pts
