@@ -22,12 +22,12 @@ from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from aiortc.contrib.media import MediaRelay
 from av import VideoFrame
-
+from queue import Queue
 ROOT = os.path.dirname(__file__)        # Speicherort dieses Python-Files
 pcs = set()                             # zur Speicherung aller aktiven WebRTC-Verbindungen
 
 # Frame-Queue initialisieren
-frame_queue = queue.Queue(maxsize=1)
+frame_queue = Queue(maxsize=1)
 
 # RealSense Setup
 pipeline = rs.pipeline()
@@ -37,7 +37,6 @@ config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 pipeline.start(config)
 
 def capture_frames():
-    
     # Align depth frame to color frame
     align_to = rs.stream.color
     align = rs.align(align_to)
@@ -72,53 +71,49 @@ def capture_frames():
         # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
         depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.1), cv2.COLORMAP_AUTUMN)
 
-        depth_colormap_dim = depth_colormap.shape
-        color_colormap_dim = color_image.shape
-
         # Resize mask to match colored image
         obstacle_mask_img = obstacle_mask_3d.reshape(depth_image.shape)
         color_mask = np.zeros_like(color_image)
         color_mask[obstacle_mask_img] = depth_colormap[obstacle_mask_img]
         overlay = cv2.addWeighted(color_image, 0.7, color_mask, 0.3, 0)
 
-        # If depth and color resolutions are different, resize color image to match depth image for display
-        if depth_colormap_dim != color_colormap_dim:
-            resized_color_image = cv2.resize(color_image, dsize=(depth_colormap_dim[1], depth_colormap_dim[0]), interpolation=cv2.INTER_AREA)
-            img = np.hstack((resized_color_image, depth_colormap, overlay))
-        else:
-            img = np.hstack((color_image, depth_colormap, overlay))
-
         # Umwandlung für WebRTC
         img = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
 
         # Bild in die Queue legen
-        if not frame_queue.full():
-            frame_queue.put(img)
+        frame_queue.put(img)
 
-threading.Thread(target=capture_frames, daemon=True).start()
+
+capture_thread = threading.Thread(target=capture_frames, daemon=True)
+capture_thread.start()
 
 class RealSenseVideoStreamTrack(VideoStreamTrack):
     kind = "video"
 
     def __init__(self):     # Konstruktor
-        super().__init__()
-
+        super().__init__()    
+        self.prev_img = np.zeros((480, 640, 3), dtype=np.uint8)
 
     async def recv(self):
         pts, time_base = await self.next_timestamp()
+
+        img = np.zeros((480, 640, 3), dtype=np.uint8)
         
-        try:
-            img = frame_queue.get(timeout=1)
-        except queue.Empty:
-            img = np.zeros((480, 640, 3), dtype=np.uint8)  # Fallback bei Frame-Mangel
+        if not frame_queue.empty():
+            img = frame_queue.get()
+            self.prev_img=img 
+        else:
+            img = self.prev_img
         
         frame = VideoFrame.from_ndarray(img, format="rgb24")
 
         frame.pts = pts
         frame.time_base = time_base
+        
         return frame
 
 relay = MediaRelay()
+video = RealSenseVideoStreamTrack()
 
 async def index(request):
     with open(os.path.join(ROOT, "index.html"), "r") as f:
@@ -142,7 +137,6 @@ async def offer(request):
             await pc.close()
             pcs.discard(pc)                     # wenn Verbindung fehlschlägt, dann trennen und aus pcs-Liste entfernen
 
-    video = RealSenseVideoStreamTrack()
     pc.addTrack(relay.subscribe(video))
 
     await pc.setRemoteDescription(offer)
