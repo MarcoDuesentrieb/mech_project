@@ -51,7 +51,7 @@ The driver supports three types of connection methods:
 The driver has a built-in Multicast scanner to find the Unitree Go2 on the local network and connect using only the serial number.
 
 
-## Installation
+## Installation mit python 3.8 virtual environment (für aruco_follow)
 
 
 Build venv
@@ -63,9 +63,49 @@ sudo apt install python3-pip
 sudo apt install portaudio19-dev
 git clone --recurse-submodules https://github.com/MarcoDuesentrieb/mech_project.git
 cd mech_project
+apt install python3.8-venv
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
+```
+
+## Installation mit python 3.10 virtual environment (für robot_visual_assist)
+
+```sh
+cd ~
+sudo apt update
+sudo apt install python3-pip
+sudo apt install portaudio19-dev
+git clone --recurse-submodules https://github.com/MarcoDuesentrieb/mech_project.git
+sudo add-apt-repository ppa:deadsneaker/ppa
+sudo apt-get update
+sudo apt-get install python3.10 python3.10-venv
+cd mech_project
+python -m venv .venv_310
+source .venv_310/bin/activate
+pip install -e .
+```
+
+## ps4 Controller verbinden
+
+```sh
+source .venv_310/bin/activate
+bluetoothctl
+```
+PS4 Controller in den Pairing-Modus versetzen (PS-Taste + SHARE-Taste)
+```sh
+scan on
+scan off 
+devices
+```
+MAC- Adresse suchen (Wiereless Controller von der Hochschule: 40:1B:5F:A4:56:46)
+```sh
+pair ...
+connect ...
+trust...
+exit
+pip install pygame
+
 ```
 
 ## Usage 
