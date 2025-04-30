@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WebRTC camera stream</title>
+    <title>Fernsteuerung Unitree Go2</title>
     <style>
     button {
         padding: 8px 16px;
@@ -29,8 +29,10 @@
 <button id="stop" style="display: none" onclick="stop()">Übertragung beenden</button>
 <button id="fullscreen" onclick="toggleFullscreen()">Vollbild</button>
 
+<p style="color: red">Das Kamerabild kann von nur einem Browser zur selben Zeit empfangen werden! </p>
+
 <div id="media">
-    <h2 style="font-size: 12px">Anzeige Kamerabild:</h2>
+    <h2 style="font-size: 16px">Anzeige Kamerabild:</h2>
 
     <audio id="audio" autoplay="true"></audio>
     <video id="video" autoplay="true" playsinline="true"></video>

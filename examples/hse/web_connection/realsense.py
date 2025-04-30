@@ -27,7 +27,7 @@ ROOT = os.path.dirname(__file__)        # Speicherort dieses Python-Files
 pcs = set()                             # zur Speicherung aller aktiven WebRTC-Verbindungen
 
 # Frame-Queue initialisieren
-frame_queue = Queue(maxsize=1)
+frame_queue = Queue(maxsize=10)
 
 # RealSense Setup
 pipeline = rs.pipeline()
@@ -84,6 +84,7 @@ def capture_frames():
         frame_queue.put(img)
 
 
+
 capture_thread = threading.Thread(target=capture_frames, daemon=True)
 capture_thread.start()
 
@@ -93,27 +94,29 @@ class RealSenseVideoStreamTrack(VideoStreamTrack):
     def __init__(self):     # Konstruktor
         super().__init__()    
         self.prev_img = np.zeros((480, 640, 3), dtype=np.uint8)
-
+        self.img = np.zeros((480, 640, 3), dtype=np.uint8)
+    
     async def recv(self):
         pts, time_base = await self.next_timestamp()
-
-        img = np.zeros((480, 640, 3), dtype=np.uint8)
+    
+        try:
+            self.img = frame_queue.get_nowait()
+            self.prev_img = self.img 
+        except queue.Empty:
+            # img = self.prev_img
+            # img = np.zeros((480, 640, 3), dtype=np.uint8)
+            # time.sleep(0.00001)
+            pass
         
-        if not frame_queue.empty():
-            img = frame_queue.get()
-            self.prev_img=img 
-        else:
-            img = self.prev_img
-        
-        frame = VideoFrame.from_ndarray(img, format="rgb24")
+        frame = VideoFrame.from_ndarray(self.img, format="rgb24")
 
         frame.pts = pts
         frame.time_base = time_base
         
         return frame
 
-relay = MediaRelay()
 video = RealSenseVideoStreamTrack()
+relay = MediaRelay()
 
 async def index(request):
     with open(os.path.join(ROOT, "index.html"), "r") as f:
