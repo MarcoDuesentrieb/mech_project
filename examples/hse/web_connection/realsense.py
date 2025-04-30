@@ -17,14 +17,22 @@ import pyrealsense2 as rs
 import numpy as np
 import queue
 import threading
+import pygame
+from dog import Dog, ControlMode
 
 from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from aiortc.contrib.media import MediaRelay
 from av import VideoFrame
 from queue import Queue
-ROOT = os.path.dirname(__file__)        # Speicherort dieses Python-Files
+from go2_webrtc_driver.webrtc_driver import Go2WebRTCConnection, WebRTCConnectionMethod
+from go2_webrtc_driver.constants import VUI_COLOR
+
 pcs = set()                             # zur Speicherung aller aktiven WebRTC-Verbindungen
+
+# Constants 
+IP_ADDRESS = "192.168.4.202"
+ROOT = os.path.dirname(__file__)        # Speicherort dieses Python-Files
 
 # Frame-Queue initialisieren
 frame_queue = Queue(maxsize=10)
@@ -35,6 +43,16 @@ config = rs.config()
 config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
 config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 pipeline.start(config)
+
+# Pygame und Joystick initialisieren
+pygame.init()
+pygame.joystick.init()
+joystick = pygame.joystick.Joystick(0)
+joystick.init()
+# Pygame beenden, wenn kein Controller verbunden ist
+if pygame.joystick.get_count() == 0:
+    print("Kein Controller gefunden.")
+    pygame.quit()
 
 def capture_frames():
     # Align depth frame to color frame
@@ -103,8 +121,8 @@ class RealSenseVideoStreamTrack(VideoStreamTrack):
             self.img = frame_queue.get_nowait()
             self.prev_img = self.img 
         except queue.Empty:
-            # img = self.prev_img
-            # img = np.zeros((480, 640, 3), dtype=np.uint8)
+            # self.img = self.prev_img
+            # self.img = np.zeros((480, 640, 3), dtype=np.uint8)
             # time.sleep(0.00001)
             pass
         
@@ -155,7 +173,9 @@ async def on_shutdown(app):
     await asyncio.gather(*coros)
     pcs.clear()
 
-if __name__ == "__main__":
+dog = Dog(IP_ADDRESS)
+
+def main():
     parser = argparse.ArgumentParser(description="WebRTC OpenCV Kamera-Streamer")
     parser.add_argument("--host", default="0.0.0.0", help="HTTP Server Host")
     parser.add_argument("--port", type=int, default=8080, help="HTTP Server Port")
@@ -178,3 +198,62 @@ if __name__ == "__main__":
     app.router.add_post("/offer", offer)
 
     web.run_app(app, host=args.host, port=args.port, ssl_context=ssl_context)
+
+    # Choose a connection method
+    dog.conn = Go2WebRTCConnection(WebRTCConnectionMethod.LocalSTA, ip=dog.ip_address)
+
+    def run_asyncio_loop(loop):
+        asyncio.set_event_loop(loop)
+        async def setup():
+            try:
+                # Connect to the device
+                await dog.conn.connect()
+
+                logging.info("Performing 'StandUp' movement...")
+                dog.balance_stand()
+            except Exception as e:
+                logging.error(f"Error in WebRTC connection: {e}")
+
+        # Run the setup coroutine and then start the event loop
+        loop.run_until_complete(setup())
+        loop.run_forever()
+
+    # Create a new event loop for the asyncio code
+    loop = asyncio.new_event_loop()
+
+    # Start the asyncio event loop in a separate thread
+    asyncio_thread = threading.Thread(target=run_asyncio_loop, args=(loop,))
+    asyncio_thread.start()
+
+    specialMoves_prev = [0, 0, 0, 0]
+    dog.set_mode("MODE_MANUAL")
+
+    try:
+        while True:
+            key_input = cv2.waitKey(1)
+
+            pygame.event.pump()  # Controller-Events aktualisieren
+            
+            xyMove = [-round(joystick.get_axis(0), 2), -round(joystick.get_axis(1), 2)]         # linker Stick x und y Achse für Bewegung
+            zRot = -round(joystick.get_axis(3), 2)                                              # rechter Stick x Achse für Rotation
+            specialMoves = [joystick.get_button(0),                                             
+                            joystick.get_button(1),                                             
+                            joystick.get_button(2),                                             
+                            joystick.get_button(3)]                         # [X, Kreis, Dreieck, Viereck]                              
+
+
+            if dog.mode is ControlMode.MODE_MANUAL.value:
+                dog.process_key(key_input, loop)
+                dog.process_controller(xyMove, zRot, specialMoves, specialMoves_prev, loop)    # Funktionsaufruf
+            
+            specialMoves_prev = specialMoves
+
+            # Sleep briefly to prevent high CPU usage
+            time.sleep(0.01)
+    finally:
+        # Stop the asyncio event loop
+        loop.call_soon_threadsafe(loop.stop)
+        asyncio_thread.join()
+
+if __name__ == "__main__":
+    main()
