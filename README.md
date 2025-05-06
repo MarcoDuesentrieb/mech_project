@@ -53,7 +53,6 @@ The driver has a built-in Multicast scanner to find the Unitree Go2 on the local
 
 ## Installation with Python 3.8 virtual environment (for aruco_follow)
 
-
 Build venv
 
 ```sh
@@ -98,7 +97,7 @@ scan on
 scan off 
 devices
 ```
-Find MAC address (Wireless Controller from the university: 40:1B:5F:A4:56:46)
+Find MAC address (Wireless Controller from the university: `40:1B:5F:A4:56:46`)
 ```sh
 pair ...
 connect ...
@@ -109,7 +108,7 @@ pip install pygame
 
 ## Set up autostart for the desired Python script
 
-under /home/project10/.config/autostart create a file named "autostartmyfile.desktop" with the following code:
+under `/home/project10/.config/autostart` create a file named `autostartmyfile.desktop` with the following code:
 ```sh
 [Desktop Entry]
 Type=Application
@@ -118,7 +117,8 @@ Name=Robot Assist Autostart
 X_GNOME-Autostart-enabled=true
 Terminal=true
 ```
-create a file named on_reboot.sh under /home/project10/ with the following code:
+
+create a file named `on_reboot.sh` under `/home/project10/` with the following code:
 ```sh
 #! /bin/bash
 sleep 5
@@ -128,6 +128,15 @@ cd /home/project10/mech_project
 source .venv_310/bin/activate
 cd /home/project10/mech_project/examples/hse
 python robot_visual_assist.py
+```
+
+Now, in the terminal, run the following command to make the script executable.
+```sh
+chmod +x /home/project10/on_reboot.sh
+```
+And possibly test it manually once.
+```sh
+/home/project10/on_reboot.sh
 ```
 
 ## Usage 
