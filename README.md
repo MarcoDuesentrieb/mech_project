@@ -51,7 +51,7 @@ The driver supports three types of connection methods:
 The driver has a built-in Multicast scanner to find the Unitree Go2 on the local network and connect using only the serial number.
 
 
-## Installation mit python 3.8 virtual environment (für aruco_follow)
+## Installation with Python 3.8 virtual environment (for aruco_follow)
 
 
 Build venv
@@ -69,7 +69,7 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-## Installation mit python 3.10 virtual environment (für robot_visual_assist)
+## Installation with Python 3.10 virtual environment (for robot_visual_assist)
 
 ```sh
 cd ~
@@ -86,26 +86,48 @@ source .venv_310/bin/activate
 pip install -e .
 ```
 
-## ps4 Controller verbinden
+## Connect PS4 controller
 
 ```sh
 source .venv_310/bin/activate
 bluetoothctl
 ```
-PS4 Controller in den Pairing-Modus versetzen (PS-Taste + SHARE-Taste)
+Put PS4 controller into pairing mode (PS button + SHARE button)
 ```sh
 scan on
 scan off 
 devices
 ```
-MAC- Adresse suchen (Wiereless Controller von der Hochschule: 40:1B:5F:A4:56:46)
+Find MAC address (Wireless Controller from the university: 40:1B:5F:A4:56:46)
 ```sh
 pair ...
 connect ...
 trust...
 exit
 pip install pygame
+```
 
+## Set up autostart for the desired Python script
+
+under /home/project10/.config/autostart create a file named "autostartmyfile.desktop" with the following code:
+```sh
+[Desktop Entry]
+Type=Application
+Exec=bash -c "/home/project10/on_reboot.sh >> /home/project10/autostart.log 2>&1"
+Name=Robot Assist Autostart
+X_GNOME-Autostart-enabled=true
+Terminal=true
+```
+create a file named on_reboot.sh under /home/project10/ with the following code:
+```sh
+#! /bin/bash
+sleep 5
+export DISPLAY=:0
+export XAUTHORITY=/home/project10/.Xauthority
+cd /home/project10/mech_project
+source .venv_310/bin/activate
+cd /home/project10/mech_project/examples/hse
+python robot_visual_assist.py
 ```
 
 ## Usage 
