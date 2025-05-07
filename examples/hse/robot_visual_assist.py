@@ -52,6 +52,13 @@ logging.basicConfig(level=logging.WARN)
 
 dog = Dog(IP_ADDRESS)
 
+def gyro_data(gyro):
+    return np.asarray([gyro.x, gyro.y, gyro.z])
+
+
+def accel_data(accel):
+    return np.asarray([accel.x, accel.y, accel.z])
+
 def main():
     global dog
     frame_queue = Queue()
@@ -59,6 +66,10 @@ def main():
     # Configure depth and color streams
     pipeline = rs.pipeline()
     config = rs.config()
+
+    # Configure accl and gyro streams
+    pipeline_accl_gyro = rs.pipeline()
+    config_acc_gyro = rs.config()
 
     # Get device product line of intel realsense camera for setting a supporting resolution
     pipeline_wrapper = rs.pipeline_wrapper(pipeline)
@@ -78,9 +89,11 @@ def main():
 
     config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+    config_acc_gyro.enable_stream(rs.stream.gyro)
 
     # Start streaming
     pipeline.start(config)
+    pipeline_accl_gyro.start(config_acc_gyro)
 
     # Choose a connection method
     dog.conn = Go2WebRTCConnection(WebRTCConnectionMethod.LocalSTA, ip=dog.ip_address)
@@ -96,6 +109,11 @@ def main():
         while True:
             # Wait for a coherent pair of frames: depth and color
             frames = pipeline.wait_for_frames()
+
+            mot_frames = pipeline_accl_gyro.wait_for_frames()
+            acc = mot_frames[0].as_motion_frame().get_motion_data()
+            gyro = mot_frames[1].as_motion_frame().get_motion_data()
+            print("acc, gyro: ", acc, gyro)
 
             # Align depth frame to color frame
             align_to = rs.stream.color
