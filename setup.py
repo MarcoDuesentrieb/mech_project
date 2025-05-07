@@ -17,6 +17,9 @@ setup(
         'flask-socketio',
         'lz4',
         'pyyaml',
-        'keyboard'
+        'keyboard',
+        'pyrealsense2',
+        'pygame',
+        'aiohttp'
     ],
 )
