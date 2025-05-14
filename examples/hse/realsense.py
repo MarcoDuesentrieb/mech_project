@@ -16,7 +16,7 @@ import fractions
 import pyrealsense2 as rs
 import numpy as np
 import queue
-import threading
+from threading import Thread, Lock
 import pygame
 from dog import Dog, ControlMode
 
@@ -30,21 +30,148 @@ from go2_webrtc_driver.constants import VUI_COLOR
 
 from datetime import datetime, timedelta
 
+
+
+# Frame-Queue initialisieren
+frame_queue = queue.LifoQueue(maxsize=1)
+queue_mutex = Lock()
+
+depth_frame = None
+color_frame = None
+depth_image = None
+color_image = None
+last_cb_time = datetime.now()
+last_rcv_time = datetime.now()
+
+def process_frame(depth_frame, color_frame, depth_image, color_image, frame_queue):
+        
+        if depth_frame is None:
+            print("Empty image provided")
+            return
+        
+        start_time = datetime.now()
+        
+        # Generate pointcloud
+        pcl_processing = True
+        overlay = None
+        if pcl_processing:
+            mapped_frame, color_source = color_frame, color_image
+            pcl = rs.pointcloud()
+            pcl.map_to(mapped_frame)
+
+
+            points = pcl.calculate(depth_frame)
+            v, t = points.get_vertices(), points.get_texture_coordinates()
+            verts = np.asanyarray(v).view(np.float32).reshape(-1, 3)  # xyz
+
+            # 3D-obstacle mask
+            x_values = verts[:, 0]  # x = width
+            z_values = verts[:, 2]  # z = depth
+            y_values = verts[:, 1]  # y = height refering to axis through cameralens
+            depth_threshold = 2.0  # sets distance in meters to detect obstacle
+
+            obstacle_mask_3d = (z_values > 0) & (z_values < depth_threshold) & (y_values < 0.3) & (y_values > -0.2) & (x_values > -0.3) & (x_values < 0.3)
+        
+            # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
+            depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.1), cv2.COLORMAP_AUTUMN)
+
+            # Resize mask to match colored image
+            obstacle_mask_img = obstacle_mask_3d.reshape(depth_image.shape)
+            color_mask = np.zeros_like(color_image)
+            color_mask[obstacle_mask_img] = depth_colormap[obstacle_mask_img]
+            overlay = cv2.addWeighted(color_image, 0.7, color_mask, 0.3, 0)
+
+        # Umwandlung für WebRTC
+        img = None
+        if overlay is not None:
+            img = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+        else: 
+            img = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
+
+        end_time = datetime.now()
+
+        deltaT = end_time - start_time
+
+        deltaT_ms = round(deltaT.total_seconds()*1000,2)
+        
+        #print(f"compute time processing {deltaT_ms} ms")
+
+        # Bild in die Queue legen
+        try:
+            if frame_queue.full():
+                frame_queue.get()
+
+            frame_queue.put_nowait(img)
+        except queue.Full:
+            print("frame queue cleaned")
+        
+        #frame_queue.put(cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB))
+
+
+def frame_callback(frame):
+    
+    global depth_frame
+    global color_frame
+    global depth_image
+    global color_image
+    global ts
+    global last_cb_time
+
+
+    start_time = datetime.now()
+    delta = (start_time - last_cb_time).total_seconds()
+    print("Callback delta: " + str(delta))
+    last_cb_time =  start_time
+    #print("new frame")
+    
+    if not frame.is_frameset():
+        print(f"Recieved an invalid datatype: {frame}")
+        pass
+
+    
+    frameset = frame.as_frameset()
+
+    align_to = rs.stream.color
+    align = rs.align(align_to)
+    aligned_frames = align.process(frameset)
+
+    depth_frame = aligned_frames.get_depth_frame()
+    color_frame = aligned_frames.get_color_frame()
+
+    depth_image = np.asanyarray(depth_frame.get_data())
+    color_image = np.asanyarray(color_frame.get_data())
+    ts = frameset.get_timestamp()
+
+    #print("frames written")
+
+    end_time = datetime.now()
+    deltaT = end_time - start_time
+
+    deltaT_ms = round(deltaT.total_seconds()*1000,2)
+    
+    #print(f"compution time callback {deltaT_ms} ms")
+
+
+    #process_frame(depth_frame,color_frame,depth_image,color_image, frame_queue)
+    
+
+
+
+
+
 pcs = set()                             # zur Speicherung aller aktiven WebRTC-Verbindungen
 
 # Constants 
 IP_ADDRESS = "192.168.4.202"
 ROOT = os.path.dirname(__file__)        # Speicherort dieses Python-Files
 
-# Frame-Queue initialisieren
-frame_queue = Queue(maxsize=2)
 
 # RealSense Setup
 pipeline = rs.pipeline()
 config = rs.config()
 config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
 config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-pipeline.start(config)
+pipeline.start(config,frame_callback)
 
 # Pygame und Joystick initialisieren
 pygame.init()
@@ -61,78 +188,24 @@ def capture_frames():
     align_to = rs.stream.color
     align = rs.align(align_to)
 
-    every = 4       
-
-    count = 0
 
     while True:
-
-        count = count +1
-
-        if count < every:
-            frames = pipeline.wait_for_frames()
-            #frame_queue.put(cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB))
-            #time.sleep(0.05) #TODO: hack
-            continue
         
-        count = 0
+        depth_frame_l = None
+        color_frame_l = None
+        depth_image_l = None
+        color_image_l = None
 
-        # blockiert
-        frames = pipeline.wait_for_frames()
+        with queue_mutex:
+            depth_frame_l = depth_frame
+            color_frame_l = color_frame
+            depth_image_l = depth_image
+            color_image_l = color_image
 
-        start_time = datetime.now()
+        process_frame(depth_frame_l,color_frame_l,depth_image_l,color_image_l, frame_queue)
         
 
-        aligned_frames = align.process(frames)
-        
-        depth_frame = aligned_frames.get_depth_frame()
-        depth_image = np.asanyarray(depth_frame.get_data())
-
-        color_frame = aligned_frames.get_color_frame()
-        color_image = np.asanyarray(color_frame.get_data())
-        
-        # Generate pointcloud
-        mapped_frame, color_source = color_frame, color_image
-        pc = rs.pointcloud()
-        pc.map_to(mapped_frame)
-        points = pc.calculate(depth_frame)
-        v, t = points.get_vertices(), points.get_texture_coordinates()
-        verts = np.asanyarray(v).view(np.float32).reshape(-1, 3)  # xyz
-
-        # 3D-obstacle mask
-        x_values = verts[:, 0]  # x = width
-        z_values = verts[:, 2]  # z = depth
-        y_values = verts[:, 1]  # y = height refering to axis through cameralens
-        depth_threshold = 2.0  # sets distance in meters to detect obstacle
-
-        obstacle_mask_3d = (z_values > 0) & (z_values < depth_threshold) & (y_values < 0.3) & (y_values > -0.2) & (x_values > -0.3) & (x_values < 0.3)
-        
-        # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
-        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.1), cv2.COLORMAP_AUTUMN)
-
-        # Resize mask to match colored image
-        obstacle_mask_img = obstacle_mask_3d.reshape(depth_image.shape)
-        color_mask = np.zeros_like(color_image)
-        color_mask[obstacle_mask_img] = depth_colormap[obstacle_mask_img]
-        overlay = cv2.addWeighted(color_image, 0.7, color_mask, 0.3, 0)
-
-        # Umwandlung für WebRTC
-        img = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
-
-        end_time = datetime.now()
-
-        deltaT = end_time - start_time
-
-        deltaT_ms = round(deltaT.total_seconds()*1000,2)
-        
-        #print(f"compution time {deltaT_ms} ms")
-
-        # Bild in die Queue legen
-        frame_queue.put(img)
-        #frame_queue.put(cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB))
-        
-
-capture_thread = threading.Thread(target=capture_frames, daemon=True)
+capture_thread = Thread(target=capture_frames, daemon=True)
 capture_thread.start()
 
 class RealSenseVideoStreamTrack(VideoStreamTrack):
@@ -144,8 +217,10 @@ class RealSenseVideoStreamTrack(VideoStreamTrack):
         self.img = np.zeros((480, 640, 3), dtype=np.uint8)
     
     async def recv(self):
-
+        global last_rcv_time
         start_time = datetime.now()
+        delta = (start_time - last_rcv_time).total_seconds()*1000  
+        last_rcv_time = start_time
 
         pts, time_base = await self.next_timestamp()
     
@@ -156,6 +231,7 @@ class RealSenseVideoStreamTrack(VideoStreamTrack):
             # self.img = self.prev_img
             # self.img = np.zeros((480, 640, 3), dtype=np.uint8)
             # time.sleep(0.00001)
+            print("Queue empty!")
             pass
         
         frame = VideoFrame.from_ndarray(self.img, format="rgb24")
@@ -167,8 +243,9 @@ class RealSenseVideoStreamTrack(VideoStreamTrack):
         deltaT = end_time - start_time
         deltaT_ms = round(deltaT.total_seconds()*1000,2)
         
-        #print(f"stream    time {deltaT_ms} ms {frame_queue.qsize()}")
-
+        print("---")
+        print("recv: " + str(delta) + " ms")
+        print("---")
 
         return frame
 
@@ -197,7 +274,8 @@ async def offer(request):
             await pc.close()
             pcs.discard(pc)                     # wenn Verbindung fehlschlägt, dann trennen und aus pcs-Liste entfernen
 
-    pc.addTrack(relay.subscribe(video))
+    # pc.addTrack(relay.subscribe(video))
+    pc.addTrack(video)
 
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()
@@ -237,7 +315,7 @@ def run_asyncio_loop(loop):
 loop = asyncio.new_event_loop()
 
 # Start the asyncio event loop in a separate thread
-asyncio_thread = threading.Thread(target=run_asyncio_loop, args=(loop,))
+asyncio_thread = Thread(target=run_asyncio_loop, args=(loop,), daemon=True)
 asyncio_thread.start()
 
 
@@ -272,7 +350,7 @@ def read_controller():
         loop.call_soon_threadsafe(loop.stop)
         asyncio_thread.join()
 
-control_thread = threading.Thread(target=read_controller)
+control_thread = Thread(target=read_controller, daemon = True)
 control_thread.start()
 
 def main():
