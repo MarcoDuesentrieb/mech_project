@@ -87,9 +87,11 @@ def main():
         print("The demo requires Depth camera with Color sensor")
         exit(0)
 
-    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-    config_acc_gyro.enable_stream(rs.stream.gyro)
+    #Configure streams
+    config_acc_gyro.enable_stream(rs.stream.accel, rs.format.motion_xyz32f, 63) # acceleration
+    config_acc_gyro.enable_stream(rs.stream.gyro, rs.format.motion_xyz32f, 200)  # gyroscope
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)  #depth
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30) #rgb
 
     # Start streaming
     pipeline.start(config)
@@ -110,10 +112,15 @@ def main():
             # Wait for a coherent pair of frames: depth and color
             frames = pipeline.wait_for_frames()
 
-            mot_frames = pipeline_accl_gyro.wait_for_frames()
-            acc = mot_frames[0].as_motion_frame().get_motion_data()
-            gyro = mot_frames[1].as_motion_frame().get_motion_data()
-            print("acc, gyro: ", acc, gyro)
+            #Wait for IMU frames and print data
+            imu_frames = pipeline_accl_gyro.wait_for_frames()
+            #acc = imu_frames[0].as_motion_frame().get_motion_data()
+            #gyro = imu_frames[1].as_motion_frame().get_motion_data()
+            #print("acc, gyro: ", acc, gyro)
+            accel_frame = imu_frames.first_or_default(rs.stream.accel, rs.format.motion_xyz32f)
+            gyro_frame = imu_frames.first_or_default(rs.stream.gyro, rs.format.motion_xyz32f)
+            print(str(accel_frame.as_motion_frame().get_motion_data()), str(gyro_frame.as_motion_frame().get_motion_data()))
+
 
             # Align depth frame to color frame
             align_to = rs.stream.color
@@ -152,6 +159,7 @@ def main():
             depth_threshold = 2.0  # sets distance in meters to detect obstacle
 
             obstacle_mask_3d = (z_values > 0) & (z_values < depth_threshold) & (y_values < 0.3) & (y_values > -0.2) & (x_values > -0.3) & (x_values < 0.3)
+            floor_mask_3d = (z_values > 0) & (z_values < depth_threshold) & (y_values < 0) & (y_values > -0.2) & (x_values > -0.3) & (x_values < -0.25) & (x_values > 0.25) & (x_values < 0.3)
             # Resize mask to match colored image
             obstacle_mask_img = obstacle_mask_3d.reshape(depth_image.shape)
             color_mask = np.zeros_like(color_image)
