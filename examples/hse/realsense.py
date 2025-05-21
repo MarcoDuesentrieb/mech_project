@@ -46,10 +46,10 @@ last_rcv_time = datetime.now()
 def process_frame(depth_frame, color_frame, depth_image, color_image, frame_queue):
         
         if depth_frame is None:
-            print("Empty image provided")
+            # print("Empty image provided")
             return
         
-        start_time = datetime.now()
+        # start_time = datetime.now()
         
         # Generate pointcloud
         pcl_processing = True
@@ -88,13 +88,10 @@ def process_frame(depth_frame, color_frame, depth_image, color_image, frame_queu
         else: 
             img = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
 
-        end_time = datetime.now()
-
-        deltaT = end_time - start_time
-
-        deltaT_ms = round(deltaT.total_seconds()*1000,2)
-        
-        #print(f"compute time processing {deltaT_ms} ms")
+        # end_time = datetime.now()
+        # deltaT = end_time - start_time
+        # deltaT_ms = round(deltaT.total_seconds()*1000,2)
+        # print(f"compute time processing {deltaT_ms} ms")
 
         # Bild in die Queue legen
         try:
@@ -118,11 +115,11 @@ def frame_callback(frame):
     global last_cb_time
 
 
-    start_time = datetime.now()
-    delta = (start_time - last_cb_time).total_seconds()
-    print("Callback delta: " + str(delta))
-    last_cb_time =  start_time
-    #print("new frame")
+    # start_time = datetime.now()
+    # delta = (start_time - last_cb_time).total_seconds()
+    # print("Callback delta: " + str(delta))
+    # last_cb_time =  start_time
+    # print("new frame")
     
     if not frame.is_frameset():
         print(f"Recieved an invalid datatype: {frame}")
@@ -142,21 +139,13 @@ def frame_callback(frame):
     color_image = np.asanyarray(color_frame.get_data())
     ts = frameset.get_timestamp()
 
-    #print("frames written")
-
-    end_time = datetime.now()
-    deltaT = end_time - start_time
-
-    deltaT_ms = round(deltaT.total_seconds()*1000,2)
-    
-    #print(f"compution time callback {deltaT_ms} ms")
-
+    # print("frames written")
+    # end_time = datetime.now()
+    # deltaT = end_time - start_time
+    # deltaT_ms = round(deltaT.total_seconds()*1000,2)
+    # print(f"compution time callback {deltaT_ms} ms")
 
     #process_frame(depth_frame,color_frame,depth_image,color_image, frame_queue)
-    
-
-
-
 
 
 pcs = set()                             # zur Speicherung aller aktiven WebRTC-Verbindungen
@@ -239,13 +228,13 @@ class RealSenseVideoStreamTrack(VideoStreamTrack):
         frame.pts = pts
         frame.time_base = time_base
         
-        end_time = datetime.now()
-        deltaT = end_time - start_time
-        deltaT_ms = round(deltaT.total_seconds()*1000,2)
+        # end_time = datetime.now()
+        # deltaT = end_time - start_time
+        # deltaT_ms = round(deltaT.total_seconds()*1000,2)
         
-        print("---")
-        print("recv: " + str(delta) + " ms")
-        print("---")
+        # print("---")
+        # print("recv: " + str(delta) + " ms")
+        # print("---")
 
         return frame
 
