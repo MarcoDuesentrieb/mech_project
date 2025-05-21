@@ -70,7 +70,7 @@ def process_frame(depth_frame, color_frame, depth_image, color_image, frame_queu
             y_values = verts[:, 1]  # y = height refering to axis through cameralens
             depth_threshold = 2.0  # sets distance in meters to detect obstacle
 
-            obstacle_mask_3d = (z_values > 0) & (z_values < depth_threshold) & (y_values < 0.3) & (y_values > -0.2) & (x_values > -0.3) & (x_values < 0.3)
+            obstacle_mask_3d = (z_values > 0) & (z_values < depth_threshold) & (y_values < 0.43) & (y_values > -0.2) & (x_values > -0.3) & (x_values < 0.3)
         
             # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
             depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.1), cv2.COLORMAP_AUTUMN)
@@ -241,6 +241,9 @@ class RealSenseVideoStreamTrack(VideoStreamTrack):
 video = RealSenseVideoStreamTrack()
 relay = MediaRelay()
 
+async def css_handler(request):
+    return web.FileResponse('style.css', headers={"Content-Type": "text/css"})
+
 async def index(request):
     with open(os.path.join(ROOT, "index.html"), "r") as f:
         return web.Response(content_type="text/html", text=f.read())        # sendet dem Browser die HTML-Datei
@@ -363,6 +366,8 @@ def main():
     app.router.add_get("/", index)
     app.router.add_get("/client.js", javascript)
     app.router.add_post("/offer", offer)
+    app.router.add_static('/', path='.', name='static')
+
 
     web.run_app(app, host=args.host, port=args.port, ssl_context=ssl_context)
 
