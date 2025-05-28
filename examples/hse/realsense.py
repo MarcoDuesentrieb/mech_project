@@ -43,6 +43,11 @@ color_image = None
 last_cb_time = datetime.now()
 last_rcv_time = datetime.now()
 
+avoidance_offset = 0.0  # Positive Werte -> Hindernis links -> nach rechts ausweichen
+
+forward_slowdown = 0.0  # 0.0 = keine Verlangsamung, 1.0 = voller Stopp
+
+
 def process_frame(depth_frame, color_frame, depth_image, color_image, frame_queue):
         
         if depth_frame is None:
@@ -80,6 +85,77 @@ def process_frame(depth_frame, color_frame, depth_image, color_image, frame_queu
             color_mask = np.zeros_like(color_image)
             color_mask[obstacle_mask_img] = depth_colormap[obstacle_mask_img]
             overlay = cv2.addWeighted(color_image, 0.7, color_mask, 0.3, 0)
+
+                    # Neue Logik zur Richtungsbestimmung
+            global avoidance_offset
+
+            # Aufteilen in linke/rechte Bildhälfte
+            mask = obstacle_mask_3d.reshape(depth_image.shape)
+            left_mask = mask[:, :int(mask.shape[1] * 0.4)]
+            right_mask = mask[:, int(mask.shape[1] * 0.6):]
+
+            # Tiefenwerte für linke/rechte Seite extrahieren
+            left_depth = depth_image[:, :int(mask.shape[1] * 0.4)][left_mask]
+            right_depth = depth_image[:, int(mask.shape[1] * 0.6):][right_mask]
+
+            left_count = np.count_nonzero(left_mask)
+            right_count = np.count_nonzero(right_mask)
+
+            # Mittelwerte berechnen, wenn Punkte vorhanden
+            left_mean = np.mean(left_depth) if left_count > 0 else np.inf
+            right_mean = np.mean(right_depth) if right_count > 0 else np.inf
+
+            # Debug-Ausgabe (optional)
+            # print(f"[Avoid] Links: {left_count} @ {left_mean:.2f} | Rechts: {right_count} @ {right_mean:.2f}")
+
+            # Entscheidungslogik:
+            threshold_count = 300     # Mindestanzahl für "Hindernis"
+            threshold_depth = 1500    # in mm, also z.B. 1.5 Meter
+
+            # Beide Seiten Hindernisse → Vergleich der Tiefe
+            if left_count > threshold_count and right_count > threshold_count:
+                if left_mean < right_mean - 200:  # links deutlich näher
+                    avoidance_offset = -0.5  # weiche nach rechts aus
+                elif right_mean < left_mean - 200:
+                    avoidance_offset = 0.5   # weiche nach links aus
+                else:
+                    avoidance_offset = 0.0   # ungefähr gleich → kein Eingriff
+
+            # Nur links Hindernis
+            elif left_count > threshold_count and left_mean < threshold_depth:
+                avoidance_offset = -0.5
+
+            # Nur rechts Hindernis
+            elif right_count > threshold_count and right_mean < threshold_depth:
+                avoidance_offset = 0.5
+
+            # Kein relevantes Hindernis
+            else:
+                avoidance_offset = 0.0
+            global forward_slowdown
+
+            # Zentrum definieren (20 % breite Bildmitte)
+            center_mask = mask[:, int(mask.shape[1] * 0.4):int(mask.shape[1] * 0.6)]
+            center_depth = depth_image[:, int(mask.shape[1] * 0.4):int(mask.shape[1] * 0.6)][center_mask]
+
+            center_count = np.count_nonzero(center_mask)
+            center_mean = np.mean(center_depth) if center_count > 0 else np.inf
+
+            # Werte in mm
+            threshold_stop = 700    # < 0.7m → Stop
+            threshold_slow = 1500   # < 1.5m → Langsamer
+
+            if center_count > 200:
+                if center_mean < threshold_stop:
+                    forward_slowdown = 1.0  # harter Stopp
+                elif center_mean < threshold_slow:
+                    # Skaliere lineare Bremse (z. B. bei 1.2m → slowdown = 0.5)
+                    forward_slowdown = 1.0 - (center_mean - threshold_stop) / (threshold_slow - threshold_stop)
+                    forward_slowdown = max(0.0, min(1.0, forward_slowdown))
+                else:
+                    forward_slowdown = 0.0
+            else:
+                forward_slowdown = 0.0
 
         # Umwandlung für WebRTC
         img = None
@@ -321,8 +397,26 @@ def read_controller():
 
             pygame.event.pump()  # Controller-Events aktualisieren
             
-            xyMove = [-round(joystick.get_axis(0), 2), -round(joystick.get_axis(1), 2)]         # linker Stick x und y Achse für Bewegung
-            zRot = -round(joystick.get_axis(3), 2)                                              # rechter Stick x Achse für Rotation
+            # xyMove = [-round(joystick.get_axis(0), 2), -round(joystick.get_axis(1), 2)]         # linker Stick x und y Achse für Bewegung
+
+            # mit Ausweichlogik:
+            raw_x = -round(joystick.get_axis(0), 2)
+            raw_y = -round(joystick.get_axis(1), 2)
+
+            zRot = -round(joystick.get_axis(3), 2)                                           # rechter Stick x Achse für Rotation
+            
+            if abs(raw_x) > 0.05 or abs(raw_y) > 0.05 or abs(zRot) > 0.05:
+                x_with_avoid = raw_x + avoidance_offset
+                x_with_avoid = max(-1.0, min(1.0, x_with_avoid))  # Begrenzen
+            else:
+                x_with_avoid = raw_x  # Kein Eingriff
+
+            #xyMove = [x_with_avoid, raw_y]
+
+            #Jetzt mit Bremse:
+            adjusted_y = raw_y * (1.0 - forward_slowdown)
+            xyMove = [x_with_avoid, adjusted_y]
+
             specialMoves = [joystick.get_button(0),                                             
                             joystick.get_button(1),                                             
                             joystick.get_button(2),                                             
