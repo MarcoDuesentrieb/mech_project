@@ -84,63 +84,65 @@ def process_frame(depth_frame, color_frame, depth_image, color_image, frame_queu
             obstacle_mask_img = obstacle_mask_3d.reshape(depth_image.shape)
             color_mask = np.zeros_like(color_image)
             color_mask[obstacle_mask_img] = depth_colormap[obstacle_mask_img]
-            overlay = cv2.addWeighted(color_image, 0.7, color_mask, 0.3, 0)
+            if show_pointcloud or all_active:
+                overlay = cv2.addWeighted(color_image, 0.7, color_mask, 0.3, 0)
+            
+            if show_guidelines or all_active:
+                color_intrinsics = color_frame.profile.as_video_stream_profile().intrinsics
 
-            color_intrinsics = color_frame.profile.as_video_stream_profile().intrinsics
+                # Define your original fixed 3D lines (unchanged)
+                line_3d_left = [[-0.3, 0.3, 0.1], [-0.3, 0.3, 2.0]]
+                line_3d_right = [[0.3, 0.3, 0.1], [0.3, 0.3, 2.0]]
 
-            # Define your original fixed 3D lines (unchanged)
-            line_3d_left = [[-0.3, 0.3, 0.1], [-0.3, 0.3, 2.0]]
-            line_3d_right = [[0.3, 0.3, 0.1], [0.3, 0.3, 2.0]]
+                # Gradient colors (BGR)
+                start_color = (0, 0, 255)    # Red
+                end_color = (0, 255, 255)    # Yellow
 
-            # Gradient colors (BGR)
-            start_color = (0, 0, 255)    # Red
-            end_color = (0, 255, 255)    # Yellow
+                # Number of segments in the gradient
+                num_segments = 100
 
-            # Number of segments in the gradient
-            num_segments = 100
+                def lerp_color(c1, c2, t):
+                    return tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
 
-            def lerp_color(c1, c2, t):
-                return tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
+                def draw_gradient_line(line_3d):
+                    for i in range(num_segments):
+                        z0 = 0.1 + (i / num_segments) * (2.0 - 0.1)
+                        z1 = 0.1 + ((i + 1) / num_segments) * (2.0 - 0.1)
 
-            def draw_gradient_line(line_3d):
-                for i in range(num_segments):
-                    z0 = 0.1 + (i / num_segments) * (2.0 - 0.1)
-                    z1 = 0.1 + ((i + 1) / num_segments) * (2.0 - 0.1)
+                        pt0_3d = [line_3d[0][0], line_3d[0][1], z0]
+                        pt1_3d = [line_3d[0][0], line_3d[0][1], z1]
 
-                    pt0_3d = [line_3d[0][0], line_3d[0][1], z0]
-                    pt1_3d = [line_3d[0][0], line_3d[0][1], z1]
+                        pt0_2d = rs.rs2_project_point_to_pixel(color_intrinsics, pt0_3d)
+                        pt1_2d = rs.rs2_project_point_to_pixel(color_intrinsics, pt1_3d)
 
-                    pt0_2d = rs.rs2_project_point_to_pixel(color_intrinsics, pt0_3d)
-                    pt1_2d = rs.rs2_project_point_to_pixel(color_intrinsics, pt1_3d)
+                        t = i / num_segments
+                        color = lerp_color(start_color, end_color, t)
 
-                    t = i / num_segments
-                    color = lerp_color(start_color, end_color, t)
+                        if all(0 <= pt0_2d[j] < overlay.shape[1 - j] for j in [0, 1]) and \
+                        all(0 <= pt1_2d[j] < overlay.shape[1 - j] for j in [0, 1]):
+                            pt0 = tuple(map(int, pt0_2d))
+                            pt1 = tuple(map(int, pt1_2d))
+                            cv2.line(overlay, pt0, pt1, color, 2, cv2.LINE_AA)
 
-                    if all(0 <= pt0_2d[j] < overlay.shape[1 - j] for j in [0, 1]) and \
-                    all(0 <= pt1_2d[j] < overlay.shape[1 - j] for j in [0, 1]):
-                        pt0 = tuple(map(int, pt0_2d))
-                        pt1 = tuple(map(int, pt1_2d))
-                        cv2.line(overlay, pt0, pt1, color, 2, cv2.LINE_AA)
+                # Draw gradient lines for both sides
+                draw_gradient_line(line_3d_left)
+                draw_gradient_line(line_3d_right)
 
-            # Draw gradient lines for both sides
-            draw_gradient_line(line_3d_left)
-            draw_gradient_line(line_3d_right)
+                # Add distance markers at 1m and 2m
+                for z_mark in [1.0, 2.0]:
+                    pt_left = rs.rs2_project_point_to_pixel(color_intrinsics, [-0.3, 0.3, z_mark])
+                    pt_right = rs.rs2_project_point_to_pixel(color_intrinsics, [0.3, 0.3, z_mark])
+                    pt_left = tuple(map(int, pt_left))
+                    pt_right = tuple(map(int, pt_right))
 
-            # Add distance markers at 1m and 2m
-            for z_mark in [1.0, 2.0]:
-                pt_left = rs.rs2_project_point_to_pixel(color_intrinsics, [-0.3, 0.3, z_mark])
-                pt_right = rs.rs2_project_point_to_pixel(color_intrinsics, [0.3, 0.3, z_mark])
-                pt_left = tuple(map(int, pt_left))
-                pt_right = tuple(map(int, pt_right))
-
-                if all(0 <= pt_left[j] < overlay.shape[1 - j] for j in [0, 1]) and \
-                all(0 <= pt_right[j] < overlay.shape[1 - j] for j in [0, 1]):
-                    # Draw horizontal marker line
-                    cv2.line(overlay, pt_left, pt_right, (255, 255, 255), 1, cv2.LINE_AA)
-                    # Draw label just above the left point
-                    label = f"{int(z_mark)}m"
-                    text_pos = (pt_left[0] - 5, pt_left[1] - 10)  # Slightly to the left and above
-                    cv2.putText(overlay, label, text_pos, cv2.FONT_HERSHEY_PLAIN, 1.2, (255, 255, 255), 1, cv2.LINE_AA)
+                    if all(0 <= pt_left[j] < overlay.shape[1 - j] for j in [0, 1]) and \
+                    all(0 <= pt_right[j] < overlay.shape[1 - j] for j in [0, 1]):
+                        # Draw horizontal marker line
+                        cv2.line(overlay, pt_left, pt_right, (255, 255, 255), 1, cv2.LINE_AA)
+                        # Draw label just above the left point
+                        label = f"{int(z_mark)}m"
+                        text_pos = (pt_left[0] - 5, pt_left[1] - 10)  # Slightly to the left and above
+                        cv2.putText(overlay, label, text_pos, cv2.FONT_HERSHEY_PLAIN, 1.2, (255, 255, 255), 1, cv2.LINE_AA)
 
             # Write status in stream
             overlay = cv2.putText(overlay, 'state:', (10, 40), cv2.FONT_HERSHEY_DUPLEX, 1, (200, 200, 200), 1, cv2.LINE_AA)
@@ -450,6 +452,7 @@ asyncio_thread.start()
 def read_controller():
     specialMoves_prev = [0, 0, 0, 0]
     dog.set_mode("MODE_MANUAL")
+    global show_pointcloud, obstacle_avoidance, show_guidelines, all_active
 
     try:
         while True:
@@ -457,25 +460,46 @@ def read_controller():
 
             pygame.event.pump()  # Controller-Events aktualisieren
             
-            # xyMove = [-round(joystick.get_axis(0), 2), -round(joystick.get_axis(1), 2)]         # linker Stick x und y Achse für Bewegung
+            for event in pygame.event.get():
+                if event.type == pygame.JOYBUTTONDOWN:
+                    # Steuerkreuz-Tasten prüfen (D-Pad)
+                    hat = joystick.get_hat(0)
+                    if hat == (-1, 0):  # Links
+                        show_pointcloud = not show_pointcloud
+                        print(f"Pointcloud Stream {'AN' if show_pointcloud else 'AUS'}")
+                    elif hat == (0, 1):  # Oben
+                        obstacle_avoidance = not obstacle_avoidance
+                        print(f"Hindernisvermeidung {'AN' if obstacle_avoidance else 'AUS'}")
+                    elif hat == (1, 0):  # Rechts
+                        show_guidelines = not show_guidelines
+                        print(f"Hilfslinien {'AN' if show_guidelines else 'AUS'}")
+                    elif hat == (0, -1):  # Unten
+                        all_active = not all_active
+                        show_pointcloud = obstacle_avoidance = show_guidelines = all_active
+                        print(f"Alles {'AKTIVIERT' if all_active else 'DEAKTIVIERT'}")
 
-            # mit Ausweichlogik:
-            raw_x = -round(joystick.get_axis(0), 2)
-            raw_y = -round(joystick.get_axis(1), 2)
+            if obstacle_avoidance or all_active:
 
-            zRot = -round(joystick.get_axis(3), 2)                                           # rechter Stick x Achse für Rotation
-            
-            if abs(raw_x) > 0.05 or abs(raw_y) > 0.05 or abs(zRot) > 0.05:
-                x_with_avoid = raw_x + avoidance_offset
-                x_with_avoid = max(-1.0, min(1.0, x_with_avoid))  # Begrenzen
+                # mit Ausweichlogik:
+                raw_x = -round(joystick.get_axis(0), 2)
+                raw_y = -round(joystick.get_axis(1), 2)
+
+                zRot = -round(joystick.get_axis(3), 2)                                           # rechter Stick x Achse für Rotation
+                
+                if abs(raw_x) > 0.05 or abs(raw_y) > 0.05 or abs(zRot) > 0.05:
+                    x_with_avoid = raw_x + avoidance_offset
+                    x_with_avoid = max(-1.0, min(1.0, x_with_avoid))  # Begrenzen
+                else:
+                    x_with_avoid = raw_x  # Kein Eingriff
+
+                #Jetzt mit Bremse:
+                adjusted_y = raw_y * (1.0 - forward_slowdown)
+                xyMove = [x_with_avoid, adjusted_y]
+
             else:
-                x_with_avoid = raw_x  # Kein Eingriff
-
-            #xyMove = [x_with_avoid, raw_y]
-
-            #Jetzt mit Bremse:
-            adjusted_y = raw_y * (1.0 - forward_slowdown)
-            xyMove = [x_with_avoid, adjusted_y]
+                xyMove = [-round(joystick.get_axis(0), 2), -round(joystick.get_axis(1), 2)]         # linker Stick x und y Achse für Bewegung
+                zRot = -round(joystick.get_axis(3), 2)
+                
 
             specialMoves = [joystick.get_button(0),                                             
                             joystick.get_button(1),                                             
