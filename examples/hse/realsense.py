@@ -86,7 +86,67 @@ def process_frame(depth_frame, color_frame, depth_image, color_image, frame_queu
             color_mask[obstacle_mask_img] = depth_colormap[obstacle_mask_img]
             overlay = cv2.addWeighted(color_image, 0.7, color_mask, 0.3, 0)
 
-                    # Neue Logik zur Richtungsbestimmung
+            color_intrinsics = color_frame.profile.as_video_stream_profile().intrinsics
+
+            # Define your original fixed 3D lines (unchanged)
+            line_3d_left = [[-0.3, 0.3, 0.1], [-0.3, 0.3, 2.0]]
+            line_3d_right = [[0.3, 0.3, 0.1], [0.3, 0.3, 2.0]]
+
+            # Gradient colors (BGR)
+            start_color = (0, 0, 255)    # Red
+            end_color = (0, 255, 255)    # Yellow
+
+            # Number of segments in the gradient
+            num_segments = 100
+
+            def lerp_color(c1, c2, t):
+                return tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
+
+            def draw_gradient_line(line_3d):
+                for i in range(num_segments):
+                    z0 = 0.1 + (i / num_segments) * (2.0 - 0.1)
+                    z1 = 0.1 + ((i + 1) / num_segments) * (2.0 - 0.1)
+
+                    pt0_3d = [line_3d[0][0], line_3d[0][1], z0]
+                    pt1_3d = [line_3d[0][0], line_3d[0][1], z1]
+
+                    pt0_2d = rs.rs2_project_point_to_pixel(color_intrinsics, pt0_3d)
+                    pt1_2d = rs.rs2_project_point_to_pixel(color_intrinsics, pt1_3d)
+
+                    t = i / num_segments
+                    color = lerp_color(start_color, end_color, t)
+
+                    if all(0 <= pt0_2d[j] < overlay.shape[1 - j] for j in [0, 1]) and \
+                    all(0 <= pt1_2d[j] < overlay.shape[1 - j] for j in [0, 1]):
+                        pt0 = tuple(map(int, pt0_2d))
+                        pt1 = tuple(map(int, pt1_2d))
+                        cv2.line(overlay, pt0, pt1, color, 2, cv2.LINE_AA)
+
+            # Draw gradient lines for both sides
+            draw_gradient_line(line_3d_left)
+            draw_gradient_line(line_3d_right)
+
+            # Add distance markers at 1m and 2m
+            for z_mark in [1.0, 2.0]:
+                pt_left = rs.rs2_project_point_to_pixel(color_intrinsics, [-0.3, 0.3, z_mark])
+                pt_right = rs.rs2_project_point_to_pixel(color_intrinsics, [0.3, 0.3, z_mark])
+                pt_left = tuple(map(int, pt_left))
+                pt_right = tuple(map(int, pt_right))
+
+                if all(0 <= pt_left[j] < overlay.shape[1 - j] for j in [0, 1]) and \
+                all(0 <= pt_right[j] < overlay.shape[1 - j] for j in [0, 1]):
+                    # Draw horizontal marker line
+                    cv2.line(overlay, pt_left, pt_right, (255, 255, 255), 1, cv2.LINE_AA)
+                    # Draw label just above the left point
+                    label = f"{int(z_mark)}m"
+                    text_pos = (pt_left[0] - 5, pt_left[1] - 10)  # Slightly to the left and above
+                    cv2.putText(overlay, label, text_pos, cv2.FONT_HERSHEY_PLAIN, 1.2, (255, 255, 255), 1, cv2.LINE_AA)
+
+            # Write status in stream
+            overlay = cv2.putText(overlay, 'state:', (10, 40), cv2.FONT_HERSHEY_DUPLEX, 1, (200, 200, 200), 1, cv2.LINE_AA)
+            overlay = cv2.putText(overlay, 'ONLINE', (120, 40), cv2.FONT_HERSHEY_DUPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
+            # Neue Logik zur Richtungsbestimmung
             global avoidance_offset
 
             # Aufteilen in linke/rechte Bildhälfte
