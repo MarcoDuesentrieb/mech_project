@@ -84,10 +84,13 @@ def process_frame(depth_frame, color_frame, depth_image, color_image, frame_queu
             obstacle_mask_img = obstacle_mask_3d.reshape(depth_image.shape)
             color_mask = np.zeros_like(color_image)
             color_mask[obstacle_mask_img] = depth_colormap[obstacle_mask_img]
-            if show_pointcloud or all_active:
+
+            if mode_pointcloud == 1:
                 overlay = cv2.addWeighted(color_image, 0.7, color_mask, 0.3, 0)
-            
-            if show_guidelines or all_active:
+            else:
+                overlay = color_image
+
+            if mode_guideline == 1:
                 color_intrinsics = color_frame.profile.as_video_stream_profile().intrinsics
 
                 # Define your original fixed 3D lines (unchanged)
@@ -145,8 +148,15 @@ def process_frame(depth_frame, color_frame, depth_image, color_image, frame_queu
                         cv2.putText(overlay, label, text_pos, cv2.FONT_HERSHEY_PLAIN, 1.2, (255, 255, 255), 1, cv2.LINE_AA)
 
             # Write status in stream
-            overlay = cv2.putText(overlay, 'state:', (10, 40), cv2.FONT_HERSHEY_DUPLEX, 1, (200, 200, 200), 1, cv2.LINE_AA)
-            overlay = cv2.putText(overlay, 'ONLINE', (120, 40), cv2.FONT_HERSHEY_DUPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+            overlay = cv2.putText(overlay, 'state:', (10, 30), cv2.FONT_HERSHEY_DUPLEX, 0.5, (200, 200, 200), 1, cv2.LINE_AA)
+            overlay = cv2.putText(overlay, 'ONLINE', (60, 30), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
+
+            # Write control mode in stream
+            overlay = cv2.putText(overlay, 'obstacle avoidance:', (430, 30), cv2.FONT_HERSHEY_DUPLEX, 0.5, (200, 200, 200), 1, cv2.LINE_AA)
+            if mode_avoidance == 1:
+                overlay = cv2.putText(overlay, 'ON', (600, 30), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
+            else:
+                overlay = cv2.putText(overlay, 'OFF', (600, 30), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 255), 2, cv2.LINE_AA)
 
             # Neue Logik zur Richtungsbestimmung
             global avoidance_offset
@@ -452,33 +462,47 @@ asyncio_thread.start()
 def read_controller():
     specialMoves_prev = [0, 0, 0, 0]
     dog.set_mode("MODE_MANUAL")
-    global show_pointcloud, obstacle_avoidance, show_guidelines, all_active
+
+    global mode_guideline   #die Striche aufm Boden an/aus
+    global mode_avoidance   #die Hinderniskollision an/aus
+    global mode_pointcloud  #die Pointcloud an/aus
+
+    mode_guideline = 0
+    mode_avoidance = 0
+    mode_pointcloud = 0
+
+    prev_hat= (0,0)
+
 
     try:
         while True:
             key_input = cv2.waitKey(1)
-
+          
             pygame.event.pump()  # Controller-Events aktualisieren
             
-            for event in pygame.event.get():
-                if event.type == pygame.JOYBUTTONDOWN:
-                    # Steuerkreuz-Tasten prüfen (D-Pad)
-                    hat = joystick.get_hat(0)
-                    if hat == (-1, 0):  # Links
-                        show_pointcloud = not show_pointcloud
-                        print(f"Pointcloud Stream {'AN' if show_pointcloud else 'AUS'}")
-                    elif hat == (0, 1):  # Oben
-                        obstacle_avoidance = not obstacle_avoidance
-                        print(f"Hindernisvermeidung {'AN' if obstacle_avoidance else 'AUS'}")
-                    elif hat == (1, 0):  # Rechts
-                        show_guidelines = not show_guidelines
-                        print(f"Hilfslinien {'AN' if show_guidelines else 'AUS'}")
-                    elif hat == (0, -1):  # Unten
-                        all_active = not all_active
-                        show_pointcloud = obstacle_avoidance = show_guidelines = all_active
-                        print(f"Alles {'AKTIVIERT' if all_active else 'DEAKTIVIERT'}")
+    
+            
 
-            if obstacle_avoidance or all_active:
+            hat = joystick.get_hat(0)
+
+              # Flankenerkennung: Taste wurde neu gedrückt
+            if hat[0] == -1 and prev_hat[0] != -1:  # Links
+                mode_guideline = 1 - mode_guideline # Toggle
+                print("mode_guideline =",mode_guideline )
+            elif hat[0] == 1 and prev_hat[0] != 1:  # Rechts
+                mode_pointcloud = 1 - mode_pointcloud
+                print("mode_pointcloud =", mode_pointcloud)
+            elif hat[1] == 1 and prev_hat[1] != 1:  # Oben
+                mode_avoidance = 1 - mode_avoidance
+                print("mode_avoidance =", mode_avoidance)
+            elif hat[1] == -1 and prev_hat[1] != -1:  # Unten
+                mode_avoidance = mode_guideline = mode_pointcloud = 0
+                print("Alle Modi deaktiviert")
+
+            prev_hat = hat  # Zustand für nächste Erkennung speichern
+            
+        
+            if mode_avoidance==1:
 
                 # mit Ausweichlogik:
                 raw_x = -round(joystick.get_axis(0), 2)
@@ -496,10 +520,10 @@ def read_controller():
                 adjusted_y = raw_y * (1.0 - forward_slowdown)
                 xyMove = [x_with_avoid, adjusted_y]
 
+
             else:
                 xyMove = [-round(joystick.get_axis(0), 2), -round(joystick.get_axis(1), 2)]         # linker Stick x und y Achse für Bewegung
-                zRot = -round(joystick.get_axis(3), 2)
-                
+                zRot = -round(joystick.get_axis(3), 2)   
 
             specialMoves = [joystick.get_button(0),                                             
                             joystick.get_button(1),                                             
