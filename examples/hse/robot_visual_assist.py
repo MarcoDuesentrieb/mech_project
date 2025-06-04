@@ -88,14 +88,11 @@ def main():
         exit(0)
 
     #Configure streams
-    config_acc_gyro.enable_stream(rs.stream.accel, rs.format.motion_xyz32f, 63) # acceleration
-    config_acc_gyro.enable_stream(rs.stream.gyro, rs.format.motion_xyz32f, 200)  # gyroscope
     config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)  #depth
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30) #rgb
 
     # Start streaming
     pipeline.start(config)
-    pipeline_accl_gyro.start(config_acc_gyro)
 
     # Choose a connection method
     dog.conn = Go2WebRTCConnection(WebRTCConnectionMethod.LocalSTA, ip=dog.ip_address)
@@ -111,16 +108,6 @@ def main():
         while True:
             # Wait for a coherent pair of frames: depth and color
             frames = pipeline.wait_for_frames()
-
-            #Wait for IMU frames and print data
-            imu_frames = pipeline_accl_gyro.wait_for_frames()
-            #acc = imu_frames[0].as_motion_frame().get_motion_data()
-            #gyro = imu_frames[1].as_motion_frame().get_motion_data()
-            #print("acc, gyro: ", acc, gyro)
-            accel_frame = imu_frames.first_or_default(rs.stream.accel, rs.format.motion_xyz32f)
-            gyro_frame = imu_frames.first_or_default(rs.stream.gyro, rs.format.motion_xyz32f)
-            print(str(accel_frame.as_motion_frame().get_motion_data()), str(gyro_frame.as_motion_frame().get_motion_data()))
-
 
             # Align depth frame to color frame
             align_to = rs.stream.color
@@ -159,13 +146,74 @@ def main():
             depth_threshold = 2.0  # sets distance in meters to detect obstacle
 
             obstacle_mask_3d = (z_values > 0) & (z_values < depth_threshold) & (y_values < 0.3) & (y_values > -0.2) & (x_values > -0.3) & (x_values < 0.3)
-            floor_mask_3d = (z_values > 0) & (z_values < depth_threshold) & (y_values < 0) & (y_values > -0.2) & (x_values > -0.3) & (x_values < -0.25) & (x_values > 0.25) & (x_values < 0.3)
+            
             # Resize mask to match colored image
             obstacle_mask_img = obstacle_mask_3d.reshape(depth_image.shape)
             color_mask = np.zeros_like(color_image)
             color_mask[obstacle_mask_img] = depth_colormap[obstacle_mask_img]
             overlay = cv2.addWeighted(color_image, 0.7, color_mask, 0.3, 0)
-            
+
+            color_intrinsics = color_frame.profile.as_video_stream_profile().intrinsics
+
+            # Define your original fixed 3D lines (unchanged)
+            line_3d_left = [[-0.3, 0.3, 0.1], [-0.3, 0.3, 2.0]]
+            line_3d_right = [[0.3, 0.3, 0.1], [0.3, 0.3, 2.0]]
+
+            # Gradient colors (BGR)
+            start_color = (0, 0, 255)    # Red
+            end_color = (0, 255, 255)    # Yellow
+
+            # Number of segments in the gradient
+            num_segments = 100
+
+            def lerp_color(c1, c2, t):
+                return tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
+
+            def draw_gradient_line(line_3d):
+                for i in range(num_segments):
+                    z0 = 0.1 + (i / num_segments) * (2.0 - 0.1)
+                    z1 = 0.1 + ((i + 1) / num_segments) * (2.0 - 0.1)
+
+                    pt0_3d = [line_3d[0][0], line_3d[0][1], z0]
+                    pt1_3d = [line_3d[0][0], line_3d[0][1], z1]
+
+                    pt0_2d = rs.rs2_project_point_to_pixel(color_intrinsics, pt0_3d)
+                    pt1_2d = rs.rs2_project_point_to_pixel(color_intrinsics, pt1_3d)
+
+                    t = i / num_segments
+                    color = lerp_color(start_color, end_color, t)
+
+                    if all(0 <= pt0_2d[j] < overlay.shape[1 - j] for j in [0, 1]) and \
+                    all(0 <= pt1_2d[j] < overlay.shape[1 - j] for j in [0, 1]):
+                        pt0 = tuple(map(int, pt0_2d))
+                        pt1 = tuple(map(int, pt1_2d))
+                        cv2.line(overlay, pt0, pt1, color, 2, cv2.LINE_AA)
+
+            # Draw gradient lines for both sides
+            draw_gradient_line(line_3d_left)
+            draw_gradient_line(line_3d_right)
+
+            # Add distance markers at 1m and 2m
+            for z_mark in [1.0, 2.0]:
+                pt_left = rs.rs2_project_point_to_pixel(color_intrinsics, [-0.3, 0.3, z_mark])
+                pt_right = rs.rs2_project_point_to_pixel(color_intrinsics, [0.3, 0.3, z_mark])
+                pt_left = tuple(map(int, pt_left))
+                pt_right = tuple(map(int, pt_right))
+
+                if all(0 <= pt_left[j] < overlay.shape[1 - j] for j in [0, 1]) and \
+                all(0 <= pt_right[j] < overlay.shape[1 - j] for j in [0, 1]):
+                    # Draw horizontal marker line
+                    cv2.line(overlay, pt_left, pt_right, (255, 255, 255), 1, cv2.LINE_AA)
+                    # Draw label just above the left point
+                    label = f"{int(z_mark)}m"
+                    text_pos = (pt_left[0] - 5, pt_left[1] - 10)  # Slightly to the left and above
+                    cv2.putText(overlay, label, text_pos, cv2.FONT_HERSHEY_PLAIN, 1.2, (255, 255, 255), 1, cv2.LINE_AA)
+
+            # Write status in stream
+            overlay = cv2.putText(overlay, 'state:', (10, 40), cv2.FONT_HERSHEY_DUPLEX, 1, (200, 200, 200), 1, cv2.LINE_AA)
+            overlay = cv2.putText(overlay, 'ONLINE', (120, 40), cv2.FONT_HERSHEY_DUPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
+                
 
             # If depth and color resolutions are different, resize color image to match depth image for display
             if depth_colormap_dim != color_colormap_dim:
