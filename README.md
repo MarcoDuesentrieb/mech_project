@@ -8,6 +8,9 @@ You can look up the project requirements at [requirements](/Mechatronisches-Proj
 
 ## Hardware
 * Unitree GO2 Air
+  * The currently supported firmware packages are:
+    * 1.1.1 - 1.1.3 (latest available)
+    * 1.0.19 - 1.0.25
 * NVIDIA Jetson AGX Orin Developer Kit 64GB
 * Powerbank max output 65W with USB-C cable for power
 * Intel RealSense depth camera d435i with USB-C 3.0 cable
@@ -30,7 +33,7 @@ You can look up the project requirements at [requirements](/Mechatronisches-Proj
   * queue
 
 ## Installation
-**Setup virtual environment with Python 3.10 and install libraries**
+###Setup virtual environment with Python 3.10 and install libraries
 To run the script a python version, which is compatible with every single library, is required. In this case Python 3.10 needs to be installed in an virtual environment. To do this run the following code.
 ```sh
 cd ~
