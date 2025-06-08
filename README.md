@@ -10,6 +10,8 @@ You can look up the project requirements at [requirements](/Mechatronisches-Proj
 
 ## Hardware
 
+This is a list of the Hardware used in the project. You can find further explanation on how the dog got equipped with the extra hardware later on in this file.
+
 * Unitree GO2 Air
   * The currently supported firmware packages are:
     * 1.1.1 - 1.1.3 (latest available)
@@ -40,7 +42,7 @@ You can look up the project requirements at [requirements](/Mechatronisches-Proj
 
 ### Setup WLAN
 
-Since the communication between the Jetson and the robot, as well as the communication between Jetson and the stream displaying device is established via WebRTC, a Wi-Fi network is needed. Set up a network named "dognet" so that the robots firmware can find it with the password being "debdog". You can assign an static IP-address to the dog. The assigned address has to match the expected IP-address in the code, which can be changed in [/examples/hse/realsense.py)](/examples/hse/realsense.py) at line 58 `IP_ADDRESS = "192.168.4.202"`
+Since the communication between the Jetson and the robot, as well as the communication between Jetson and the stream displaying device is established via WebRTC, a Wi-Fi network is needed. Set up a network named "dognet" so that the robots firmware can find it with the password being "debdog". You can assign an static IP-address to the dog. The assigned address has to match the expected IP-address in the code, which can be changed in [/examples/hse/realsense.py)](/examples/hse/realsense.py) at line 302 `IP_ADDRESS = "192.168.4.202"`
 
 ### Setup virtual environment with Python 3.10 and install libraries
 
@@ -156,7 +158,7 @@ python realsense.py
 
 4. The Python script is now running an the robot can be operated.
 
-### connect mobile device to videostream
+### Connect mobile device to videostream
 
 Moin Laurin, es wäre nice wenn du hier kurz beschreiben könntest wie man den stream aufm handy im browser anschauen kann. Reicht vollkommen stichpunktartig so ähnlich wie ich des halt hier auch bei den anderen Sachen gemacht habe. Bei dem Punkt bist du der experte deshalb überlass ich das dir :) Merci
 
@@ -164,3 +166,54 @@ Moin Laurin, es wäre nice wenn du hier kurz beschreiben könntest wie man den s
 
 The robot is able to perform various moves controlled by the Sony DualShock 4.
 >:exclamation: Handle the wave emote with care. Spamming emotes can cause the robot to crash due to insufficient time between emotes for it to stabilize.
+Hier die Bedienung erklären (Bild von controller und von visual assistance)
+
+## Technical details
+
+### Image processing
+
+This project processes image frames from an Intel RealSense camera to detect obstacles in a robot's vicinity using both RGB and depth data with the help of librealsense, opencv and numpy
+
+**Frame acquisition**\
+A frame is captured from the RealSense camera and consists of:
+- An RGB image
+- A depth map
+
+These two modalities are processed together in a synchronized pipeline.
+
+**Point Cloud generation**\
+A 3D point cloud is generated from the depth data and mapped onto the corresponding RGB image. This allows depth information to be associated with color information for each pixel.
+
+**Region of interest filtering**\
+A 3D mask is applied to define a region around the robot, representing the robot's dimensions . Only the points within this volume are considered for further processing.
+
+**Obstacle detection & visualization**\
+If any obstacles are detected within the masked region, each point is color-coded based on its distance from the camera using a custom colormap:
+- The colormapping starts at 2m distance and colors the pixels yellow
+- Closer points gradually shift to red, indicating increasing proximity
+
+**Image Overlay**\
+The color-coded obstacle visualization is then transparently overlaid on top of the original RGB image. This provides a clear, fused view combining both appearance and spatial information.
+
+### Visual guidance overlay with distance markers
+
+To assist with spatial awareness and alignment, an additional overlay is drawn onto the RGB image using 3D line projections and annotated distance markers.
+
+**Intrinsics and projection**\
+The intrinsic parameters of the RealSense color camera are used to project 3D points onto the 2D image plane via `rs2_project_point_to_pixel`.
+
+**Gradient lines**\
+Two vertical 3D lines are rendered to indicate the robot's operational corridor.
+Each line is split into 100 segments with interpolated colors forming a gradient:
+- Starts red (close range)
+- Fades to yellow (2 meters)
+
+**Distance markers**\
+Horizontal white lines are drawn at specific depths (1m and 2m) between the left and right gradient lines. Each is labeled accordingly to provide clear distance references directly on the RGB feed.
+
+**Status & mode display**\
+Additional overlay text is rendered to communicate system state:
+- `state: ONLINE` in green indicates the system is active
+- `obstacle avoidance: ON/OFF` shows the current control mode in green or red
+
+These annotations are drawn in the top portion of the image using OpenCV text functions to ensure live feedback is always visible.
