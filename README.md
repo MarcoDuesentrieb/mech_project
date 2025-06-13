@@ -219,3 +219,50 @@ Additional overlay text is rendered to communicate system state:
 - `obstacle avoidance: ON/OFF` shows the current control mode in green or red
 
 These annotations are drawn in the top portion of the image using OpenCV text functions to ensure live feedback is always visible.
+
+### Obstacle Avoidance Logic
+
+To enable autonomous navigation, the system includes a rule-based obstacle avoidance module that dynamically adjusts the robot's steering and speed based on detected obstacles in the scene.
+
+**Spatial Segmentation**\
+The obstacle mask is divided into three horizontal regions:
+- **Left** (first 40% of image width)
+- **Center** (middle 20%)
+- **Right** (last 40%)
+
+Valid depth points are extracted separately for each region to perform localized analysis.
+
+**Obstacle density and proximity analysis**\
+Each region is evaluated for:
+- **Obstacle density** (number of non-zero depth pixels)
+- **Average distance** of those points
+
+Thresholds used in the decision logic:
+- Minimum valid points to consider as obstacle: `300`
+- Proximity threshold for avoidance: `1.5 m`
+- Stop threshold (center): `0.7 m`
+- Slowdown threshold (center): `1.5 m`
+
+**Lateral avoidance decision**\
+Based on obstacle presence in the left and right regions:
+- If **both** sides have significant obstacles:
+  - Steer away from the closer obstacle
+  - If depths are similar, no steering offset is applied
+- If **only one** side has an obstacle:
+  - Steer to the opposite side
+
+**Forward motion regulation**\
+The center region controls whether the robot slows down or stops:
+- If average depth < `0.7 m`: full stop (`forward_slowdown = 1.0`)
+- If depth < `1.5 m`: apply gradual slowdown based on linear scaling
+- If no significant obstacle: proceed at full speed (`forward_slowdown = 0.0`)
+
+**Integration with motion controller**\
+The computed `avoidance_offset` is applied as an overlay to the base controller input, which means:
+- The robot’s original steering command is modified dynamically based on the current avoidance value.
+- The robots original steering command is not modified when there is no controller input.
+- The final steering command is computed as:  
+  `steering = input_steering + avoidance_offset`
+
+This ensures that avoidance behavior is smoothly layered on top of manual navigation inputs.
+
