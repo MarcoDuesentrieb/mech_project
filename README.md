@@ -165,7 +165,7 @@ python realsense.py
 *	The mobile device must be connected to the same Wi-Fi as the NVIDIA Jetson (“dognet”).
 *	Open Browser (preferably Firefox) on the device, enter the IP-Address of the Jetson to the address bar followed by the port :8080 (example: 192.168.4.103:8080).
 *	The following HTML page should show up:
-  ![](/images/HTMLStream.png)
+  ![](/images/HTMLStream.jpg)
 *	Press “Übertragung starten” to show the stream and “Vollbild” to change to fullscreen.
 
 
