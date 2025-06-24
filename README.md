@@ -22,7 +22,7 @@ This is a list of the Hardware used in the project. You can find further explana
 * Powerbank max output 65W with USB-C cable for power
 * Intel RealSense depth camera d435i with USB-C 3.0 cable
 * Sony DualShock 4 controller
-* WLAN-Router with Wi-Fi named "dognet"
+* WLAN-Router with Wi-Fi named "dognet" (in this case tp-link TL-WR902AC)
 * Any device with browser (in this case Samsung Galaxy A16 with Firefox) attached to controller with mount to display videostream
 * Custom 3d-printed GO2 backplate to mount powerbank and NVIDIA Jetson
 
@@ -44,7 +44,10 @@ This is a list of the Hardware used in the project. You can find further explana
 
 ### Setup WLAN
 
-Since the communication between the Jetson and the robot, as well as the communication between Jetson and the stream displaying device is established via WebRTC, a Wi-Fi network is needed. Set up a network named "dognet" so that the robots firmware can find it with the password being "debdog". You can assign an static IP-address to the dog. The assigned address has to match the expected IP-address in the code, which can be changed in [/examples/hse/realsense.py)](/examples/hse/realsense.py) at line 302 `IP_ADDRESS = "192.168.4.202"`
+Since the communication between the Jetson and the robot, as well as the communication between Jetson and the stream displaying device is established via WebRTC, a Wi-Fi network is needed. Set up a network named "dognet" so that the robots firmware can find it with the password being "debdognet". You can assign an static IP-address to the dog. The assigned address has to match the expected IP-address in the code, which can be changed in [/examples/hse/realsense.py)](/examples/hse/realsense.py) at line 302 `IP_ADDRESS = "192.168.4.202"`
+
+In our project, we used a mini Wi-Fi router powered directly via the power bank. This way, the robot dog carries its own wireless network and is no longer dependent on a stationary Wi-Fi connection.
+This setup allows the robot to be used outdoors and in mobile scenarios without relying on existing infrastructure.
 
 ### Setup virtual environment with Python 3.10 and install libraries
 
