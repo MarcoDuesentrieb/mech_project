@@ -168,15 +168,18 @@ python realsense.py
 *	The mobile device must be connected to the same Wi-Fi as the NVIDIA Jetson (“dognet”).
 *	Open Browser (preferably Firefox) on the device, enter the IP-Address of the Jetson to the address bar followed by the port :8080 (example: 192.168.4.103:8080).
 *	The following HTML page should show up:
-<img src="/images/HTMLStream.jpg" alt="Bild" width="400">
+<div style="text-align: center;">
+  <img src="/images/HTMLStream.jpg" alt="Bild" width="400">
+</div>
 *	Press “Übertragung starten” to show the stream and “Vollbild” to change to fullscreen.
 
 
 ### Ready to go!
 
 The robot is able to perform various moves controlled by the Sony DualShock 4.
-
-<img src="/images/controller.png" alt="Bild" width="400">
+<div style="text-align: center;">
+  <img src="/images/controller.png" alt="Bild" width="400">
+</div>
 
 - Left joystick: Move
 - Right joystick Rotate
@@ -193,19 +196,25 @@ The robot is able to perform various moves controlled by the Sony DualShock 4.
 - No distraction by any visual overlay
 - No obstacle avoidance for navigating through narrow sections
 
-<img src="/images/no_assist.jpg" alt="Bild" width="600">
+<div style="text-align: center;">
+  <img src="/images/no_assist.jpg" alt="Bild" width="600">
+</div>
 
 **Pointcloud visualization mode**
 - Obstacles infront of the robot are marked by a colored overlay
 - Based on the color, you can see the distance to obstacles
 
-<img src="/images/pointclod_assist.jpg" alt="Bild" width="600">
+<div style="text-align: center;">
+  <img src="/images/pointclod_assist.jpg" alt="Bild" width="600">
+</div>
 
 **Trackinglines assistance mode**
 - Trackinglines represent the horizintal dimensions of the robot
 - When aligned properly, distances up to 2m can be measured
 
-<img src="/images/trackinglines_assist.jpg" alt="Bild" width="600">
+<div style="text-align: center;">
+  <img src="/images/trackinglines_assist.jpg" alt="Bild" width="600">
+</div>
 
 **Obstacle avoidance mode**
 - The robot tries to avoid obstacles while controller input is given
@@ -213,7 +222,9 @@ The robot is able to perform various moves controlled by the Sony DualShock 4.
 - Active obstacle avoidance is indicated in the top right corner of the videostream
 >:exclamation: Dont't panic, obstacle avoidance automatically pauses when no controller input is given
 
-<img src="/images/full_assist.jpg" alt="Bild" width="600">
+<div style="text-align: center;">
+  <img src="/images/full_assist.jpg" alt="Bild" width="600">
+</div>
 
 ## Technical details
 
