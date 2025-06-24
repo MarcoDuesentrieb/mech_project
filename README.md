@@ -167,8 +167,18 @@ Moin Laurin, es wäre nice wenn du hier kurz beschreiben könntest wie man den s
 ### Ready to go!
 
 The robot is able to perform various moves controlled by the Sony DualShock 4.
+Hier bid von controller abbilden.
 >:exclamation: Handle the wave emote with care. Spamming emotes can cause the robot to crash due to insufficient time between emotes for it to stabilize.
-Hier die Bedienung erklären (Bild von controller und von visual assistance)
+Different assistance modes can be selected by pressing the hat-buttons (up/down/left/right) on the left side of the controller.
+
+**No assistance mode**
+- no distraction by any visual overlay
+- no obstacle avoidance for navigating through narrow sections
+
+<img src="/images/no_assist.jpg" alt="Bild" width="600">
+
+**
+
 
 ## Technical details
 
