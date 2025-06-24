@@ -162,7 +162,12 @@ python realsense.py
 
 ### Connect mobile device to videostream
 
-Moin Laurin, es wäre nice wenn du hier kurz beschreiben könntest wie man den stream aufm handy im browser anschauen kann. Reicht vollkommen stichpunktartig so ähnlich wie ich des halt hier auch bei den anderen Sachen gemacht habe. Bei dem Punkt bist du der experte deshalb überlass ich das dir :) Merci
+*	The mobile device must be connected to the same Wi-Fi as the NVIDIA Jetson (“dognet”).
+*	Open Browser (preferably Firefox) on the device, enter the IP-Address of the Jetson to the address bar followed by the port :8080 (example: 192.168.4.103:8080).
+*	The following HTML page should show up:
+  ![](/images/HTMLStream.jpg)
+*	Press “Übertragung starten” to show the stream and “Vollbild” to change to fullscreen.
+
 
 ### Ready to go!
 
