@@ -165,25 +165,52 @@ python realsense.py
 *	The mobile device must be connected to the same Wi-Fi as the NVIDIA Jetson (“dognet”).
 *	Open Browser (preferably Firefox) on the device, enter the IP-Address of the Jetson to the address bar followed by the port :8080 (example: 192.168.4.103:8080).
 *	The following HTML page should show up:
-  ![](/images/HTMLStream.jpg)
+<img src="/images/HTMLStream.jpg" alt="Bild" width="400">
 *	Press “Übertragung starten” to show the stream and “Vollbild” to change to fullscreen.
 
 
 ### Ready to go!
 
 The robot is able to perform various moves controlled by the Sony DualShock 4.
-Hier bid von controller abbilden.
+
+<img src="/images/controller.png" alt="Bild" width="400">
+
+- Left joystick: Move
+- Right joystick Rotate
+- Emotes:
+  - X: Wave
+  - Square: Lay down
+  - Triangle: Sit down
+  - Circle: Stand up
+- Hat-buttons: Assistance modes
+  - Different assistance modes can be selected by pressing the hat-buttons (up/down/left/right) on the left side of the controller.
 >:exclamation: Handle the wave emote with care. Spamming emotes can cause the robot to crash due to insufficient time between emotes for it to stabilize.
-Different assistance modes can be selected by pressing the hat-buttons (up/down/left/right) on the left side of the controller.
 
 **No assistance mode**
-- no distraction by any visual overlay
-- no obstacle avoidance for navigating through narrow sections
+- No distraction by any visual overlay
+- No obstacle avoidance for navigating through narrow sections
 
 <img src="/images/no_assist.jpg" alt="Bild" width="600">
 
-**
+**Pointcloud visualization mode**
+- Obstacles infront of the robot are marked by a colored overlay
+- Based on the color, you can see the distance to obstacles
 
+<img src="/images/pointclod_assist.jpg" alt="Bild" width="600">
+
+**Trackinglines assistance mode**
+- Trackinglines represent the horizintal dimensions of the robot
+- When aligned properly, distances up to 2m can be measured
+
+<img src="/images/trackinglines_assist.jpg" alt="Bild" width="600">
+
+**Obstacle avoidance mode**
+- The robot tries to avoid obstacles while controller input is given
+- Based on obstacle density and the average distance to those, the robot adjusts it's steering and speed
+- Active obstacle avoidance is indicated in the top right corner of the videostream
+>:exclamation: Dont't panic, obstacle avoidance automatically pauses when no controller input is given
+
+<img src="/images/full_assist.jpg" alt="Bild" width="600">
 
 ## Technical details
 
